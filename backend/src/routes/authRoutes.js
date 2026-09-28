@@ -5,26 +5,73 @@ const {
   loginUser,
 } = require("../controllers/authController");
 
-const { protect } = require("../middleware/authMiddleware");
-const { authorizeRoles } = require("../middleware/roleMiddleware");
+const {
+  protect,
+} = require("../middleware/authMiddleware");
+
+const {
+  authorizeRoles,
+} = require("../middleware/roleMiddleware");
 
 const router = express.Router();
 
-router.post("/register", registerUser);
-router.post("/login", loginUser);
+// --------------------------------------------------
+// PUBLIC AUTH ROUTES
+// --------------------------------------------------
 
-router.get("/me", protect, (req, res) => {
-  return res.status(200).json({
-    success: true,
-    user: {
-      id: req.user._id,
-      name: req.user.name,
-      email: req.user.email,
-      role: req.user.role,
-      status: req.user.status,
-    },
-  });
-});
+router.post(
+  "/register",
+  registerUser
+);
+
+router.post(
+  "/login",
+  loginUser
+);
+
+// --------------------------------------------------
+// CURRENT LOGGED-IN USER
+// --------------------------------------------------
+
+router.get(
+  "/me",
+  protect,
+  (req, res) => {
+    return res.status(200).json({
+      success: true,
+
+      user: {
+        id:
+          req.user._id,
+
+        adminCode:
+          req.user.role ===
+          "admin"
+            ? req.user.adminCode
+            : undefined,
+
+        name:
+          req.user.name,
+
+        email:
+          req.user.email,
+
+        phone:
+          req.user.phone,
+
+        role:
+          req.user.role,
+
+        status:
+          req.user.status,
+      },
+    });
+  }
+);
+
+// --------------------------------------------------
+// ADMIN TEST
+// --------------------------------------------------
 
 router.get(
   "/admin-test",
@@ -33,7 +80,23 @@ router.get(
   (req, res) => {
     return res.status(200).json({
       success: true,
-      message: "Admin access granted.",
+
+      message:
+        "Admin access granted.",
+
+      admin: {
+        id:
+          req.user._id,
+
+        adminCode:
+          req.user.adminCode,
+
+        name:
+          req.user.name,
+
+        email:
+          req.user.email,
+      },
     });
   }
 );
