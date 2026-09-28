@@ -32,6 +32,7 @@ const generateAdminCode =
     const latestAdmin =
       await User.findOne({
         role: "admin",
+
         adminCode: {
           $exists: true,
           $ne: null,
@@ -227,6 +228,33 @@ const registerUser =
         adminEmails.includes(
           normalizedEmail
         );
+
+      // -----------------------------------
+      // MAXIMUM ADMIN LIMIT
+      // -----------------------------------
+
+      const MAX_ADMINS = 2;
+
+      if (isAdmin) {
+        const adminCount =
+          await User.countDocuments({
+            role: "admin",
+          });
+
+        if (
+          adminCount >=
+          MAX_ADMINS
+        ) {
+          return res
+            .status(403)
+            .json({
+              success: false,
+
+              message:
+                "Maximum admin limit reached. Only 2 admin accounts are allowed.",
+            });
+        }
+      }
 
       // -----------------------------------
       // Generate admin code
@@ -555,7 +583,7 @@ const loginUser =
       }
 
       // -----------------------------------
-      // Token
+      // Generate token
       // -----------------------------------
 
       const token =
