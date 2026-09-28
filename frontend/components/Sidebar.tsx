@@ -228,6 +228,7 @@ export default function Sidebar({
           }
         `}
       >
+        {/* Header */}
         <div className="shrink-0 border-b border-gray-200 p-5">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
@@ -245,8 +246,8 @@ export default function Sidebar({
             <button
               type="button"
               onClick={onClose}
-              className="shrink-0 text-2xl leading-none text-gray-500 transition hover:text-black focus:text-black lg:hidden"
               aria-label="Close sidebar"
+              className="shrink-0 text-2xl leading-none text-gray-500 transition hover:text-gray-900 focus:text-gray-900 focus:outline-none lg:hidden"
             >
               ×
             </button>
@@ -275,62 +276,111 @@ export default function Sidebar({
           )}
         </div>
 
+        {/* Navigation */}
         <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto p-4">
-          {menuItems.map(
-            (item) => {
-              const active =
-                pathname ===
-                  item.href ||
-                (item.href !==
+          {menuItems.map((item) => {
+            const active =
+              pathname === item.href ||
+              (
+                item.href !==
                   "/dashboard" &&
-                  pathname.startsWith(
-                    `${item.href}/`
-                  ));
+                pathname.startsWith(
+                  `${item.href}/`
+                )
+              );
 
-              const isNotification =
-                item.href ===
-                "/dashboard/notifications";
+            const isNotification =
+              item.href ===
+              "/dashboard/notifications";
 
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={onClose}
-                  className={`flex items-center justify-between rounded-lg px-4 py-3 text-sm font-medium transition outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 ${
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={onClose}
+                style={{
+                  color: active
+                    ? "#ffffff"
+                    : "#374151",
+                }}
+                className={`
+                  group
+                  flex items-center justify-between
+                  rounded-lg px-4 py-3
+                  text-sm font-medium
+                  transition-colors duration-200
+                  outline-none
+                  focus-visible:ring-2
+                  focus-visible:ring-gray-400
+                  focus-visible:ring-offset-2
+                  ${
                     active
-                      ? "bg-black text-white hover:bg-black hover:text-white focus:bg-black focus:text-white"
-                      : "text-gray-700 hover:bg-gray-100 hover:text-gray-900 focus:bg-gray-100 focus:text-gray-900"
-                  }`}
+                      ? "bg-black hover:bg-black focus:bg-black"
+                      : "bg-transparent hover:bg-gray-100 focus:bg-gray-100"
+                  }
+                `}
+              >
+                <span
+                  style={{
+                    color: active
+                      ? "#ffffff"
+                      : "#374151",
+                  }}
+                  className={
+                    active
+                      ? "text-white"
+                      : "text-gray-700 group-hover:text-gray-900 group-focus:text-gray-900"
+                  }
                 >
-                  <span>
-                    {item.name}
-                  </span>
+                  {item.name}
+                </span>
 
-                  {isNotification &&
-                    unreadCount > 0 && (
-                      <span
-                        className={`ml-3 flex min-w-6 items-center justify-center rounded-full px-2 py-0.5 text-xs font-semibold ${
+                {isNotification &&
+                  unreadCount > 0 && (
+                    <span
+                      className={`
+                        ml-3 flex min-w-6
+                        items-center justify-center
+                        rounded-full
+                        px-2 py-0.5
+                        text-xs font-semibold
+                        ${
                           active
                             ? "bg-white text-black"
                             : "bg-red-500 text-white"
-                        }`}
-                      >
-                        {unreadCount > 99
-                          ? "99+"
-                          : unreadCount}
-                      </span>
-                    )}
-                </Link>
-              );
-            }
-          )}
+                        }
+                      `}
+                    >
+                      {unreadCount > 99
+                        ? "99+"
+                        : unreadCount}
+                    </span>
+                  )}
+              </Link>
+            );
+          })}
         </nav>
 
+        {/* Logout */}
         <div className="shrink-0 border-t border-gray-200 p-4">
           <button
             type="button"
             onClick={handleLogout}
-            className="w-full rounded-lg bg-red-50 px-4 py-3 text-sm font-medium text-red-600 transition hover:bg-red-100 hover:text-red-700 focus:bg-red-100 focus:text-red-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-300 focus-visible:ring-offset-2"
+            className="
+              w-full rounded-lg
+              bg-red-50 px-4 py-3
+              text-sm font-medium
+              text-red-600
+              transition-colors
+              hover:bg-red-100
+              hover:text-red-700
+              focus:bg-red-100
+              focus:text-red-700
+              focus:outline-none
+              focus-visible:ring-2
+              focus-visible:ring-red-300
+              focus-visible:ring-offset-2
+            "
           >
             Logout
           </button>
