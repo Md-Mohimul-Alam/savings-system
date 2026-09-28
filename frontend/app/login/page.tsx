@@ -1,11 +1,12 @@
 "use client";
 
+import Image from "next/image";
+import Link from "next/link";
+
 import {
   FormEvent,
   useState,
 } from "react";
-
-import Link from "next/link";
 
 import {
   useRouter,
@@ -81,20 +82,36 @@ export default function LoginPage() {
     };
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-gray-100 px-4 py-10">
-      <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-lg">
-        <div className="mb-8 text-center">
-          <h1 className="text-3xl font-bold text-gray-900">
-            Group Savings
+    <main className="flex min-h-screen items-center justify-center bg-gradient-to-br from-gray-50 via-white to-emerald-50 px-4 py-10">
+      <div className="w-full max-w-md rounded-3xl border border-gray-200 bg-white p-6 shadow-xl sm:p-8">
+        {/* Logo */}
+        <div className="mb-7 text-center">
+          <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+            <Image
+              src="/logo.png"
+              alt="FAME'S Organization Logo"
+              width={80}
+              height={80}
+              priority
+              className="h-full w-full object-contain"
+            />
+          </div>
+
+          <h1 className="text-2xl font-bold tracking-tight text-gray-950 sm:text-3xl">
+            FAME&apos;S Organization
           </h1>
 
           <p className="mt-2 text-sm text-gray-500">
-            Login to your account
+            Savings & Investment Management
+          </p>
+
+          <p className="mt-1 text-xs text-gray-400">
+            Sign in to continue
           </p>
         </div>
 
         {error && (
-          <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-600">
+          <div className="mb-5 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-600">
             {error}
           </div>
         )}
@@ -124,7 +141,7 @@ export default function LoginPage() {
               required
               autoComplete="email"
               placeholder="you@example.com"
-              className="w-full rounded-lg border border-gray-300 px-4 py-3 outline-none transition focus:border-black"
+              className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
             />
           </div>
 
@@ -147,7 +164,7 @@ export default function LoginPage() {
               required
               autoComplete="tel"
               placeholder="01XXXXXXXXX"
-              className="w-full rounded-lg border border-gray-300 px-4 py-3 outline-none transition focus:border-black"
+              className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
             />
           </div>
 
@@ -172,7 +189,7 @@ export default function LoginPage() {
               required
               autoComplete="current-password"
               placeholder="Enter password"
-              className="w-full rounded-lg border border-gray-300 px-4 py-3 outline-none transition focus:border-black"
+              className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
             />
           </div>
 
@@ -181,7 +198,7 @@ export default function LoginPage() {
             disabled={
               loading
             }
-            className="w-full rounded-lg bg-black px-4 py-3 font-medium text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
+            className="w-full rounded-xl bg-emerald-700 px-4 py-3 font-semibold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {loading
               ? "Logging in..."
@@ -191,10 +208,10 @@ export default function LoginPage() {
 
         <p className="mt-6 text-center text-sm text-gray-500">
           Want to join the
-          group?{" "}
+          organization?{" "}
           <Link
             href="/register"
-            className="font-medium text-black underline"
+            className="font-semibold text-emerald-700 hover:text-emerald-800 hover:underline"
           >
             Create an account
           </Link>
