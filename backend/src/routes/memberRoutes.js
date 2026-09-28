@@ -8,6 +8,7 @@ const {
   approveUser,
   getPendingUsers,
   updateMember,
+  deleteMember,
 } = require("../controllers/memberController");
 
 const {
@@ -89,6 +90,13 @@ router.patch(
   "/:id",
   authorizeRoles("admin"),
   updateMember
+);
+
+// Delete one member
+router.delete(
+  "/:id",
+  authorizeRoles("admin"),
+  deleteMember
 );
 
 module.exports = router;

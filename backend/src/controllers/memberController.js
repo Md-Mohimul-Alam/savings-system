@@ -756,6 +756,53 @@ const updateMyMemberProfile =
       });
     }
   };
+const deleteMember = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid member ID",
+      });
+    }
+
+    const member = await Member.findById(id);
+
+    if (!member) {
+      return res.status(404).json({
+        success: false,
+        message: "Member not found",
+      });
+    }
+
+    const userId = member.user;
+
+    await Member.findByIdAndDelete(id);
+
+    // Optional:
+    // Also delete the linked user account.
+    // Keep this enabled only if deleting a member
+    // should completely remove their login account.
+    if (userId) {
+      await User.findByIdAndDelete(userId);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Member deleted successfully",
+    });
+  } catch (error) {
+    console.error("Delete member error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message:
+        error?.message ||
+        "Failed to delete member",
+    });
+  }
+};
 
 // --------------------------------------------------
 // EXPORTS
@@ -771,4 +818,5 @@ module.exports = {
   approveUser,
   getPendingUsers,
   updateMember,
+  deleteMember,
 };

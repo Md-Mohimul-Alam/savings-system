@@ -24,3 +24,13 @@ export const approveUser = async (
 
   return response.data;
 };
+
+export const deleteMember = async (
+  memberId: string
+) => {
+  const response = await api.delete(
+    `/members/${memberId}`
+  );
+
+  return response.data;
+};
