@@ -1,137 +1,93 @@
 const mongoose = require("mongoose");
-const bcrypt = require("bcryptjs");
 
-const userSchema = new mongoose.Schema(
-  {
-    name: {
-      type: String,
-      required: [
-        true,
-        "Name is required",
-      ],
-      trim: true,
+const transactionSchema =
+  new mongoose.Schema(
+    {
+      type: {
+        type: String,
+        enum: [
+          "CONTRIBUTION",
+          "EXPENSE",
+          "INVESTMENT",
+          "INVESTMENT_RETURN",
+          "PROFIT_DISTRIBUTION",
+          "MEMBER_PAYOUT",
+          "ADJUSTMENT",
+        ],
+        required: true,
+      },
+
+      direction: {
+        type: String,
+        enum: [
+          "IN",
+          "OUT",
+        ],
+        required: true,
+      },
+
+      amount: {
+        type: Number,
+        required: true,
+        min: 0,
+      },
+
+      member: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Member",
+        default: null,
+      },
+
+      referenceType: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+
+      referenceId: {
+        type: mongoose.Schema.Types.ObjectId,
+        default: null,
+      },
+
+      description: {
+        type: String,
+        required: true,
+        trim: true,
+      },
+
+      transactionDate: {
+        type: Date,
+        default: Date.now,
+      },
+
+      createdBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        required: true,
+      },
+
+      dataScope: {
+        type: String,
+        enum: [
+          "live",
+          "demo",
+        ],
+        default: "live",
+        index: true,
+      },
     },
-
-    email: {
-      type: String,
-      required: [
-        true,
-        "Email is required",
-      ],
-      unique: true,
-      lowercase: true,
-      trim: true,
-    },
-
-    phone: {
-      type: String,
-      required: [
-        true,
-        "Phone number is required",
-      ],
-      trim: true,
-    },
-
-    password: {
-      type: String,
-      required: [
-        true,
-        "Password is required",
-      ],
-      minlength: 6,
-      select: false,
-    },
-
-    adminCode: {
-      type: String,
-      unique: true,
-      sparse: true,
-      trim: true,
-      uppercase: true,
-    },
-
-    role: {
-      type: String,
-      enum: [
-        "admin",
-        "member",
-      ],
-      default: "member",
-    },
-
-    status: {
-      type: String,
-      enum: [
-        "active",
-        "pending",
-        "suspended",
-      ],
-      default: "pending",
-    },
-
-    isDemo: {
-      type: Boolean,
-      default: false,
-      index: true,
-    },
-
-    dataScope: {
-      type: String,
-      enum: [
-        "live",
-        "demo",
-      ],
-      default: "live",
-      index: true,
-    },
-  },
-  {
-    timestamps: true,
-  }
-);
-
-// --------------------------------------------------
-// HASH PASSWORD
-// --------------------------------------------------
-
-userSchema.pre(
-  "save",
-  async function () {
-    if (
-      !this.isModified(
-        "password"
-      )
-    ) {
-      return;
+    {
+      timestamps: true,
     }
+  );
 
-    const salt =
-      await bcrypt.genSalt(10);
-
-    this.password =
-      await bcrypt.hash(
-        this.password,
-        salt
-      );
-  }
-);
-
-// --------------------------------------------------
-// COMPARE PASSWORD
-// --------------------------------------------------
-
-userSchema.methods.comparePassword =
-  async function (
-    enteredPassword
-  ) {
-    return bcrypt.compare(
-      enteredPassword,
-      this.password
-    );
-  };
+transactionSchema.index({
+  dataScope: 1,
+  transactionDate: -1,
+});
 
 module.exports =
   mongoose.model(
-    "User",
-    userSchema
+    "Transaction",
+    transactionSchema
   );

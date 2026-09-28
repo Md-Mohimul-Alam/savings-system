@@ -21,7 +21,10 @@ const auditRoutes = require("./routes/auditRoutes");
 
 const app = express();
 
-// Allowed frontend origins
+// --------------------------------------------------
+// ALLOWED FRONTEND ORIGINS
+// --------------------------------------------------
+
 const allowedOrigins = [
   "http://localhost:3000",
   "http://127.0.0.1:3000",
@@ -29,53 +32,107 @@ const allowedOrigins = [
 ];
 
 if (process.env.FRONTEND_URL) {
-  const frontendUrl = process.env.FRONTEND_URL.replace(/\/$/, "");
+  const frontendUrl =
+    process.env.FRONTEND_URL.replace(
+      /\/$/,
+      ""
+    );
 
-  if (!allowedOrigins.includes(frontendUrl)) {
-    allowedOrigins.push(frontendUrl);
+  if (
+    !allowedOrigins.includes(
+      frontendUrl
+    )
+  ) {
+    allowedOrigins.push(
+      frontendUrl
+    );
   }
 }
 
-// CORS
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      // Allow Postman, curl, server-to-server
-      if (!origin) {
-        return callback(null, true);
-      }
+// --------------------------------------------------
+// CORS OPTIONS
+// --------------------------------------------------
 
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-
-      console.error(`CORS blocked for origin: ${origin}`);
-
+const corsOptions = {
+  origin: (
+    origin,
+    callback
+  ) => {
+    // Allow curl, Postman, server-to-server
+    if (!origin) {
       return callback(
-        new Error(`CORS blocked for origin: ${origin}`)
+        null,
+        true
       );
-    },
+    }
 
-    credentials: true,
+    if (
+      allowedOrigins.includes(
+        origin
+      )
+    ) {
+      return callback(
+        null,
+        true
+      );
+    }
 
-    methods: [
-      "GET",
-      "POST",
-      "PUT",
-      "PATCH",
-      "DELETE",
-      "OPTIONS",
-    ],
+    console.error(
+      `CORS blocked for origin: ${origin}`
+    );
 
-    allowedHeaders: [
-      "Content-Type",
-      "Authorization",
-    ],
-  })
+    // Do not throw a normal Error here.
+    // Just reject the origin.
+    return callback(
+      null,
+      false
+    );
+  },
+
+  credentials: true,
+
+  methods: [
+    "GET",
+    "POST",
+    "PUT",
+    "PATCH",
+    "DELETE",
+    "OPTIONS",
+  ],
+
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+  ],
+
+  optionsSuccessStatus: 204,
+};
+
+// --------------------------------------------------
+// CORS MIDDLEWARE
+// --------------------------------------------------
+
+app.use(
+  cors(
+    corsOptions
+  )
 );
 
-// Body parsers
-app.use(express.json());
+// Explicitly handle OPTIONS before DB middleware
+app.options(
+  /.*/,
+  cors(
+    corsOptions
+  )
+);
+
+// --------------------------------------------------
+// BODY PARSERS
+// --------------------------------------------------
+
+app.use(
+  express.json()
+);
 
 app.use(
   express.urlencoded({
@@ -83,47 +140,101 @@ app.use(
   })
 );
 
-// Cookie parser
-app.use(cookieParser());
+// --------------------------------------------------
+// COOKIE PARSER
+// --------------------------------------------------
 
-// Root health check
-app.get("/", (req, res) => {
-  return res.status(200).json({
-    success: true,
-    message: "Group Savings API is running",
-  });
-});
+app.use(
+  cookieParser()
+);
 
-// API health check
-app.get("/api/health", (req, res) => {
-  return res.status(200).json({
-    success: true,
-    message: "API is healthy",
-  });
-});
+// --------------------------------------------------
+// ROOT HEALTH CHECK
+// --------------------------------------------------
 
-// Ensure MongoDB is connected before API routes
-app.use("/api", async (req, res, next) => {
-  try {
-    await connectDB();
-    next();
-  } catch (error) {
-    console.error(
-      "Database connection middleware error:",
-      error
-    );
-
-    return res.status(500).json({
-      success: false,
-      message: "Database connection failed",
-    });
+app.get(
+  "/",
+  (
+    req,
+    res
+  ) => {
+    return res
+      .status(200)
+      .json({
+        success: true,
+        message:
+          "Group Savings API is running",
+      });
   }
-});
+);
 
-// API Routes
-app.use("/api/auth", authRoutes);
+// --------------------------------------------------
+// API HEALTH CHECK
+// --------------------------------------------------
 
-app.use("/api/members", memberRoutes);
+app.get(
+  "/api/health",
+  (
+    req,
+    res
+  ) => {
+    return res
+      .status(200)
+      .json({
+        success: true,
+        message:
+          "API is healthy",
+      });
+  }
+);
+
+// --------------------------------------------------
+// MONGODB CONNECTION MIDDLEWARE
+// --------------------------------------------------
+
+app.use(
+  "/api",
+  async (
+    req,
+    res,
+    next
+  ) => {
+    try {
+      await connectDB();
+
+      next();
+    } catch (
+      error
+    ) {
+      console.error(
+        "Database connection middleware error:",
+        error
+      );
+
+      return res
+        .status(500)
+        .json({
+          success: false,
+          message:
+            "Database connection failed",
+        });
+    }
+  }
+);
+
+// --------------------------------------------------
+// API ROUTES
+// --------------------------------------------------
+
+app.use(
+  "/api/auth",
+  authRoutes
+);
+
+app.use(
+  "/api/members",
+  memberRoutes
+);
 
 app.use(
   "/api/contributions",
@@ -180,24 +291,54 @@ app.use(
   auditRoutes
 );
 
-// 404 handler
-app.use((req, res) => {
-  return res.status(404).json({
-    success: false,
-    message: "API route not found",
-  });
-});
+// --------------------------------------------------
+// 404 HANDLER
+// --------------------------------------------------
 
-// Global error handler
-app.use((err, req, res, next) => {
-  console.error("Unhandled error:", err);
+app.use(
+  (
+    req,
+    res
+  ) => {
+    return res
+      .status(404)
+      .json({
+        success: false,
+        message:
+          "API route not found",
+      });
+  }
+);
 
-  return res.status(err.status || 500).json({
-    success: false,
-    message:
-      err.message ||
-      "Internal server error",
-  });
-});
+// --------------------------------------------------
+// GLOBAL ERROR HANDLER
+// --------------------------------------------------
 
-module.exports = app;
+app.use(
+  (
+    err,
+    req,
+    res,
+    next
+  ) => {
+    console.error(
+      "Unhandled error:",
+      err
+    );
+
+    return res
+      .status(
+        err.status ||
+          500
+      )
+      .json({
+        success: false,
+        message:
+          err.message ||
+          "Internal server error",
+      });
+  }
+);
+
+module.exports =
+  app;

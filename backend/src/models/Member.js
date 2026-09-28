@@ -1,78 +1,76 @@
 const mongoose = require("mongoose");
-const bcrypt = require("bcryptjs");
 
-const userSchema = new mongoose.Schema(
+const memberSchema = new mongoose.Schema(
   {
-    name: {
-      type: String,
-      required: [
-        true,
-        "Name is required",
-      ],
-      trim: true,
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      unique: true,
     },
 
-    email: {
+    memberCode: {
       type: String,
-      required: [
-        true,
-        "Email is required",
-      ],
+      required: true,
       unique: true,
-      lowercase: true,
       trim: true,
     },
 
     phone: {
       type: String,
-      required: [
-        true,
-        "Phone number is required",
-      ],
       trim: true,
     },
 
-    password: {
+    address: {
       type: String,
-      required: [
-        true,
-        "Password is required",
-      ],
-      minlength: 6,
-      select: false,
-    },
-
-    adminCode: {
-      type: String,
-      unique: true,
-      sparse: true,
       trim: true,
-      uppercase: true,
     },
 
-    role: {
-      type: String,
-      enum: [
-        "admin",
-        "member",
-      ],
-      default: "member",
+    monthlyContribution: {
+      type: Number,
+      default: 1000,
+      min: 0,
     },
 
-    status: {
+    joinDate: {
+      type: Date,
+      default: Date.now,
+    },
+
+    membershipStatus: {
       type: String,
       enum: [
         "active",
-        "pending",
-        "suspended",
+        "inactive",
+        "exited",
       ],
-      default: "pending",
+      default: "active",
     },
 
-    isDemo: {
-      type: Boolean,
-      default: false,
-      index: true,
+    totalContribution: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    ownershipPercentage: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100,
+    },
+
+    nidNumber: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+
+    passportNumber: {
+      type: String,
+      trim: true,
+      uppercase: true,
+      default: "",
     },
 
     dataScope: {
@@ -90,48 +88,13 @@ const userSchema = new mongoose.Schema(
   }
 );
 
-// --------------------------------------------------
-// HASH PASSWORD
-// --------------------------------------------------
-
-userSchema.pre(
-  "save",
-  async function () {
-    if (
-      !this.isModified(
-        "password"
-      )
-    ) {
-      return;
-    }
-
-    const salt =
-      await bcrypt.genSalt(10);
-
-    this.password =
-      await bcrypt.hash(
-        this.password,
-        salt
-      );
-  }
-);
-
-// --------------------------------------------------
-// COMPARE PASSWORD
-// --------------------------------------------------
-
-userSchema.methods.comparePassword =
-  async function (
-    enteredPassword
-  ) {
-    return bcrypt.compare(
-      enteredPassword,
-      this.password
-    );
-  };
+memberSchema.index({
+  dataScope: 1,
+  membershipStatus: 1,
+});
 
 module.exports =
   mongoose.model(
-    "User",
-    userSchema
+    "Member",
+    memberSchema
   );
