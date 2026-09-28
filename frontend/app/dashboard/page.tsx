@@ -1,8 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import {
+  useEffect,
+  useState,
+} from "react";
 
-import { getDashboardSummary } from "@/services/dashboardApi";
+import {
+  getDashboardSummary,
+} from "@/services/dashboardApi";
+
 import DashboardCharts from "@/components/DashboardCharts";
 
 interface AdminDashboardData {
@@ -87,6 +93,15 @@ type DashboardData =
   | AdminDashboardData
   | MemberDashboardData;
 
+type CardTone =
+  | "blue"
+  | "green"
+  | "purple"
+  | "orange"
+  | "red"
+  | "cyan"
+  | "slate";
+
 export default function DashboardPage() {
   const [data, setData] =
     useState<DashboardData | null>(null);
@@ -98,39 +113,42 @@ export default function DashboardPage() {
     useState("");
 
   useEffect(() => {
-    const loadDashboard = async () => {
-      try {
-        setError("");
+    const loadDashboard =
+      async () => {
+        try {
+          setError("");
 
-        const result =
-          await getDashboardSummary();
+          const result =
+            await getDashboardSummary();
 
-        setData(result);
-      } catch (error: any) {
-        setError(
-          error?.response?.data?.message ||
-            "Failed to load dashboard"
-        );
-      } finally {
-        setLoading(false);
-      }
-    };
+          setData(result);
+        } catch (error: any) {
+          setError(
+            error?.response?.data?.message ||
+              "Failed to load dashboard"
+          );
+        } finally {
+          setLoading(false);
+        }
+      };
 
     loadDashboard();
   }, []);
 
   if (loading) {
-    return (
-      <div className="text-gray-500">
-        Loading dashboard...
-      </div>
-    );
+    return <DashboardLoading />;
   }
 
   if (error) {
     return (
-      <div className="rounded-lg bg-red-50 p-4 text-red-600">
-        {error}
+      <div className="rounded-2xl border border-red-200 bg-red-50 p-5">
+        <p className="font-semibold text-red-700">
+          Unable to load dashboard
+        </p>
+
+        <p className="mt-1 text-sm text-red-600">
+          {error}
+        </p>
       </div>
     );
   }
@@ -172,103 +190,215 @@ function AdminDashboard({
   const month =
     data.currentMonth;
 
+  const collectionRate =
+    month.expectedAmount > 0
+      ? Math.min(
+          100,
+          Math.round(
+            (month.collectedAmount /
+              month.expectedAmount) *
+              100
+          )
+        )
+      : 0;
+
   return (
-    <div>
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">
-          Admin Dashboard
-        </h1>
+    <div className="space-y-8">
+      {/* Header */}
+      <section>
+        <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
+          <div>
+            <div className="mb-2 flex items-center gap-2">
+              <span className="rounded-full bg-gray-900 px-3 py-1 text-xs font-semibold text-white">
+                Admin
+              </span>
 
-        <p className="mt-2 text-gray-500">
-          Group savings and investment overview.
-        </p>
-      </div>
+              <span className="text-sm text-gray-500">
+                Savings & Investment Management
+              </span>
+            </div>
 
-      <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+            <h1 className="text-3xl font-bold tracking-tight text-gray-950 sm:text-4xl">
+              Dashboard Overview
+            </h1>
+
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-500 sm:text-base">
+              Monitor savings, investments,
+              expenses and member activity
+              from one place.
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
+            <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
+              Current Period
+            </p>
+
+            <p className="mt-1 font-semibold text-gray-900">
+              {formatMonth(
+                month.month
+              )}{" "}
+              {month.year}
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Main stats */}
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <SummaryCard
           title="Total Savings"
           value={`৳${totalSavings.toLocaleString()}`}
+          description="Total member contributions"
+          tone="blue"
         />
 
         <SummaryCard
           title="Available Cash"
           value={`৳${availableCash.toLocaleString()}`}
+          description="Current liquid balance"
+          tone="green"
         />
 
         <SummaryCard
           title="Total Invested"
           value={`৳${totalInvested.toLocaleString()}`}
+          description="Capital currently invested"
+          tone="purple"
         />
 
         <SummaryCard
-          title="Members"
+          title="Total Members"
           value={totalMembers.toString()}
+          description="Active group members"
+          tone="slate"
         />
 
         <SummaryCard
           title="Investment Value"
           value={`৳${totalInvestmentValue.toLocaleString()}`}
+          description="Current portfolio value"
+          tone="cyan"
         />
 
         <SummaryCard
           title="Profit / Loss"
           value={`৳${totalProfitLoss.toLocaleString()}`}
+          description={
+            totalProfitLoss >= 0
+              ? "Current portfolio gain"
+              : "Current portfolio loss"
+          }
+          tone={
+            totalProfitLoss >= 0
+              ? "green"
+              : "red"
+          }
         />
 
         <SummaryCard
           title="Total Expenses"
           value={`৳${totalExpenses.toLocaleString()}`}
+          description="Recorded operating expenses"
+          tone="orange"
         />
-      </div>
+      </section>
 
-      <div className="mt-8 rounded-xl border border-gray-200 bg-white p-6">
-        <h2 className="text-xl font-semibold text-gray-900">
-          Current Month
-        </h2>
+      {/* Current month */}
+      <section className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+        <div className="border-b border-gray-100 px-5 py-5 sm:px-6">
+          <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+                Monthly Contribution
+              </p>
 
-        <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <MiniCard
+              <h2 className="mt-1 text-xl font-bold text-gray-900">
+                {formatMonth(
+                  month.month
+                )}{" "}
+                {month.year}
+              </h2>
+            </div>
+
+            <div className="min-w-[190px]">
+              <div className="mb-2 flex items-center justify-between text-sm">
+                <span className="text-gray-500">
+                  Collection progress
+                </span>
+
+                <span className="font-semibold text-gray-900">
+                  {collectionRate}%
+                </span>
+              </div>
+
+              <div className="h-2 overflow-hidden rounded-full bg-gray-100">
+                <div
+                  className="h-full rounded-full bg-gray-900 transition-all"
+                  style={{
+                    width: `${collectionRate}%`,
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid gap-px bg-gray-200 sm:grid-cols-2 xl:grid-cols-3">
+          <MonthlyStat
             title="Expected"
             value={`৳${month.expectedAmount.toLocaleString()}`}
           />
 
-          <MiniCard
+          <MonthlyStat
             title="Collected"
             value={`৳${month.collectedAmount.toLocaleString()}`}
           />
 
-          <MiniCard
+          <MonthlyStat
             title="Outstanding"
             value={`৳${month.outstandingAmount.toLocaleString()}`}
           />
 
-          <MiniCard
+          <MonthlyStat
             title="Paid Members"
             value={month.paidMembers.toString()}
           />
-        </div>
 
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          <MiniCard
+          <MonthlyStat
             title="Partial Members"
             value={month.partialMembers.toString()}
           />
 
-          <MiniCard
+          <MonthlyStat
             title="Due Members"
             value={month.dueMembers.toString()}
           />
         </div>
-      </div>
+      </section>
 
-      <DashboardCharts
-        monthlySavings={
-          data.charts.monthlySavings
-        }
-        investmentPerformance={
-          data.charts.investmentPerformance
-        }
-      />
+      {/* Charts */}
+      <section>
+        <div className="mb-4">
+          <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+            Analytics
+          </p>
+
+          <h2 className="mt-1 text-xl font-bold text-gray-900">
+            Financial Performance
+          </h2>
+        </div>
+
+        <DashboardCharts
+          monthlySavings={
+            data.charts.monthlySavings
+          }
+          investmentPerformance={
+            data.charts
+              .investmentPerformance
+          }
+        />
+      </section>
     </div>
   );
 }
@@ -289,56 +419,102 @@ function MemberDashboard({
   const month =
     data.currentMonth;
 
+  const monthlyProgress =
+    month.expectedAmount > 0
+      ? Math.min(
+          100,
+          Math.round(
+            (month.paidAmount /
+              month.expectedAmount) *
+              100
+          )
+        )
+      : 0;
+
   return (
-    <div>
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">
-          Welcome
-          {data.member.name
-            ? `, ${data.member.name}`
-            : ""}
-        </h1>
-
-        <p className="mt-2 text-gray-500">
-          Your personal savings and ownership overview.
-        </p>
-      </div>
-
-      <div className="mb-6 rounded-xl border border-gray-200 bg-white p-5">
-        <div className="flex flex-wrap items-center justify-between gap-4">
+    <div className="space-y-8">
+      {/* Header */}
+      <section>
+        <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
           <div>
-            <p className="text-sm text-gray-500">
-              Member Code
-            </p>
+            <div className="mb-2">
+              <span className="rounded-full bg-gray-900 px-3 py-1 text-xs font-semibold text-white">
+                Member Dashboard
+              </span>
+            </div>
 
-            <p className="mt-1 text-lg font-semibold text-gray-900">
-              {data.member.memberCode}
+            <h1 className="text-3xl font-bold tracking-tight text-gray-950 sm:text-4xl">
+              Welcome
+              {data.member.name
+                ? `, ${data.member.name}`
+                : ""}
+            </h1>
+
+            <p className="mt-2 text-sm leading-6 text-gray-500 sm:text-base">
+              View your savings,
+              contribution history,
+              ownership and investment share.
             </p>
           </div>
 
-          <span className="rounded-full bg-green-50 px-3 py-1 text-sm font-medium capitalize text-green-700">
-            {
-              data.member
-                .membershipStatus
-            }
-          </span>
-        </div>
-      </div>
+          <div className="flex items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
+            <div>
+              <p className="text-xs text-gray-400">
+                Member ID
+              </p>
 
-      <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+              <p className="font-semibold text-gray-900">
+                {
+                  data.member
+                    .memberCode
+                }
+              </p>
+            </div>
+
+            <span
+              className={`rounded-full px-3 py-1 text-xs font-semibold capitalize ${
+                data.member
+                  .membershipStatus ===
+                "active"
+                  ? "bg-green-50 text-green-700"
+                  : "bg-gray-100 text-gray-600"
+              }`}
+            >
+              {
+                data.member
+                  .membershipStatus
+              }
+            </span>
+          </div>
+        </div>
+      </section>
+
+      {/* Member stats */}
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <SummaryCard
           title="My Contribution"
           value={`৳${totalContribution.toLocaleString()}`}
+          description="Total amount contributed"
+          tone="blue"
         />
 
         <SummaryCard
           title="Expected Contribution"
           value={`৳${expectedContribution.toLocaleString()}`}
+          description="Expected contribution total"
+          tone="purple"
         />
 
         <SummaryCard
           title="Outstanding"
           value={`৳${outstandingContribution.toLocaleString()}`}
+          description="Remaining unpaid contribution"
+          tone={
+            outstandingContribution >
+            0
+              ? "orange"
+              : "green"
+          }
         />
 
         <SummaryCard
@@ -346,11 +522,15 @@ function MemberDashboard({
           value={`${Number(
             ownershipPercentage
           ).toFixed(2)}%`}
+          description="Your current group ownership"
+          tone="cyan"
         />
 
         <SummaryCard
           title="Investment Share"
           value={`৳${totalInvestmentShare.toLocaleString()}`}
+          description="Your estimated investment share"
+          tone="green"
         />
 
         <SummaryCard
@@ -359,22 +539,33 @@ function MemberDashboard({
             data.member
               .monthlyContribution
           ).toLocaleString()}`}
+          description="Regular monthly contribution"
+          tone="slate"
         />
-      </div>
+      </section>
 
-      <div className="mt-8 rounded-xl border border-gray-200 bg-white p-6">
-        <h2 className="text-xl font-semibold text-gray-900">
-          This Month
-        </h2>
+      {/* Current month */}
+      <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
+        <div className="flex flex-col justify-between gap-5 md:flex-row md:items-center">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+              This Month
+            </p>
 
-        <p className="mt-1 text-sm text-gray-500">
-          {formatMonth(
-            month.month
-          )}{" "}
-          {month.year}
-        </p>
+            <h2 className="mt-1 text-xl font-bold text-gray-900">
+              {formatMonth(
+                month.month
+              )}{" "}
+              {month.year}
+            </h2>
+          </div>
 
-        <div className="mt-5 grid gap-4 sm:grid-cols-3">
+          <StatusBadge
+            status={month.status}
+          />
+        </div>
+
+        <div className="mt-6 grid gap-4 sm:grid-cols-3">
           <MiniCard
             title="Expected"
             value={`৳${month.expectedAmount.toLocaleString()}`}
@@ -386,29 +577,45 @@ function MemberDashboard({
           />
 
           <MiniCard
-            title="Status"
-            value={
-              month.status
-                .charAt(0)
-                .toUpperCase() +
-              month.status.slice(1)
-            }
+            title="Progress"
+            value={`${monthlyProgress}%`}
           />
         </div>
-      </div>
 
-      <div className="mt-8 rounded-xl border border-gray-200 bg-white p-6">
-        <h2 className="mb-5 text-xl font-semibold text-gray-900">
-          My Savings History
-        </h2>
+        <div className="mt-5">
+          <div className="h-2.5 overflow-hidden rounded-full bg-gray-100">
+            <div
+              className="h-full rounded-full bg-gray-900 transition-all"
+              style={{
+                width: `${monthlyProgress}%`,
+              }}
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* Savings chart */}
+      <section>
+        <div className="mb-4">
+          <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+            Savings Activity
+          </p>
+
+          <h2 className="mt-1 text-xl font-bold text-gray-900">
+            My Savings History
+          </h2>
+        </div>
 
         <DashboardCharts
           monthlySavings={
             data.charts.monthlySavings
           }
           investmentPerformance={[]}
+          showInvestmentChart={
+            false
+          }
         />
-      </div>
+      </section>
     </div>
   );
 }
@@ -416,19 +623,107 @@ function MemberDashboard({
 function SummaryCard({
   title,
   value,
+  description,
+  tone = "slate",
+}: {
+  title: string;
+  value: string;
+  description?: string;
+  tone?: CardTone;
+}) {
+  const tones: Record<
+    CardTone,
+    {
+      dot: string;
+      soft: string;
+    }
+  > = {
+    blue: {
+      dot: "bg-blue-500",
+      soft: "bg-blue-50",
+    },
+
+    green: {
+      dot: "bg-emerald-500",
+      soft: "bg-emerald-50",
+    },
+
+    purple: {
+      dot: "bg-violet-500",
+      soft: "bg-violet-50",
+    },
+
+    orange: {
+      dot: "bg-orange-500",
+      soft: "bg-orange-50",
+    },
+
+    red: {
+      dot: "bg-red-500",
+      soft: "bg-red-50",
+    },
+
+    cyan: {
+      dot: "bg-cyan-500",
+      soft: "bg-cyan-50",
+    },
+
+    slate: {
+      dot: "bg-gray-700",
+      soft: "bg-gray-100",
+    },
+  };
+
+  const selected =
+    tones[tone];
+
+  return (
+    <div className="group relative overflow-hidden rounded-2xl border border-gray-200 bg-white p-5 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-md sm:p-6">
+      <div
+        className={`absolute right-4 top-4 h-12 w-12 rounded-2xl ${selected.soft}`}
+      />
+
+      <div className="relative">
+        <div className="flex items-center gap-2">
+          <span
+            className={`h-2.5 w-2.5 rounded-full ${selected.dot}`}
+          />
+
+          <p className="text-sm font-medium text-gray-500">
+            {title}
+          </p>
+        </div>
+
+        <p className="mt-4 text-2xl font-bold tracking-tight text-gray-950 sm:text-3xl">
+          {value}
+        </p>
+
+        {description && (
+          <p className="mt-2 text-xs leading-5 text-gray-400">
+            {description}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function MonthlyStat({
+  title,
+  value,
 }: {
   title: string;
   value: string;
 }) {
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-6">
-      <p className="text-sm text-gray-500">
+    <div className="bg-white p-5 transition hover:bg-gray-50 sm:p-6">
+      <p className="text-sm font-medium text-gray-500">
         {title}
       </p>
 
-      <h2 className="mt-2 text-2xl font-bold text-gray-900">
+      <p className="mt-2 text-xl font-bold text-gray-950">
         {value}
-      </h2>
+      </p>
     </div>
   );
 }
@@ -441,14 +736,63 @@ function MiniCard({
   value: string;
 }) {
   return (
-    <div className="rounded-lg bg-gray-50 p-4">
-      <p className="text-sm text-gray-500">
+    <div className="rounded-xl border border-gray-100 bg-gray-50 p-4">
+      <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
         {title}
       </p>
 
-      <p className="mt-1 text-lg font-semibold text-gray-900">
+      <p className="mt-2 text-lg font-bold text-gray-900">
         {value}
       </p>
+    </div>
+  );
+}
+
+function StatusBadge({
+  status,
+}: {
+  status: "paid" | "partial" | "due";
+}) {
+  const styles = {
+    paid:
+      "bg-green-50 text-green-700 border-green-200",
+
+    partial:
+      "bg-orange-50 text-orange-700 border-orange-200",
+
+    due:
+      "bg-red-50 text-red-700 border-red-200",
+  };
+
+  return (
+    <span
+      className={`w-fit rounded-full border px-3 py-1.5 text-xs font-semibold capitalize ${styles[status]}`}
+    >
+      {status}
+    </span>
+  );
+}
+
+function DashboardLoading() {
+  return (
+    <div className="animate-pulse space-y-8">
+      <div>
+        <div className="h-8 w-64 rounded bg-gray-200" />
+        <div className="mt-3 h-4 w-80 max-w-full rounded bg-gray-100" />
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {Array.from({
+          length: 7,
+        }).map((_, index) => (
+          <div
+            key={index}
+            className="h-36 rounded-2xl border border-gray-200 bg-white"
+          />
+        ))}
+      </div>
+
+      <div className="h-72 rounded-2xl border border-gray-200 bg-white" />
     </div>
   );
 }
@@ -471,5 +815,8 @@ function formatMonth(
     "December",
   ];
 
-  return months[month - 1] || "";
+  return (
+    months[month - 1] ||
+    ""
+  );
 }
