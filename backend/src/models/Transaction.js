@@ -1,65 +1,88 @@
 const mongoose = require("mongoose");
+const bcrypt = require("bcryptjs");
 
-const transactionSchema = new mongoose.Schema(
+const userSchema = new mongoose.Schema(
   {
-    type: {
+    name: {
+      type: String,
+      required: [
+        true,
+        "Name is required",
+      ],
+      trim: true,
+    },
+
+    email: {
+      type: String,
+      required: [
+        true,
+        "Email is required",
+      ],
+      unique: true,
+      lowercase: true,
+      trim: true,
+    },
+
+    phone: {
+      type: String,
+      required: [
+        true,
+        "Phone number is required",
+      ],
+      trim: true,
+    },
+
+    password: {
+      type: String,
+      required: [
+        true,
+        "Password is required",
+      ],
+      minlength: 6,
+      select: false,
+    },
+
+    adminCode: {
+      type: String,
+      unique: true,
+      sparse: true,
+      trim: true,
+      uppercase: true,
+    },
+
+    role: {
       type: String,
       enum: [
-        "CONTRIBUTION",
-        "EXPENSE",
-        "INVESTMENT",
-        "INVESTMENT_RETURN",
-        "PROFIT_DISTRIBUTION",
-        "MEMBER_PAYOUT",
-        "ADJUSTMENT",
+        "admin",
+        "member",
       ],
-      required: true,
+      default: "member",
     },
 
-    direction: {
+    status: {
       type: String,
-      enum: ["IN", "OUT"],
-      required: true,
+      enum: [
+        "active",
+        "pending",
+        "suspended",
+      ],
+      default: "pending",
     },
 
-    amount: {
-      type: Number,
-      required: true,
-      min: 0,
+    isDemo: {
+      type: Boolean,
+      default: false,
+      index: true,
     },
 
-    member: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Member",
-      default: null,
-    },
-
-    referenceType: {
+    dataScope: {
       type: String,
-      default: "",
-      trim: true,
-    },
-
-    referenceId: {
-      type: mongoose.Schema.Types.ObjectId,
-      default: null,
-    },
-
-    description: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-
-    transactionDate: {
-      type: Date,
-      default: Date.now,
-    },
-
-    createdBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      required: true,
+      enum: [
+        "live",
+        "demo",
+      ],
+      default: "live",
+      index: true,
     },
   },
   {
@@ -67,4 +90,48 @@ const transactionSchema = new mongoose.Schema(
   }
 );
 
-module.exports = mongoose.model("Transaction", transactionSchema);
+// --------------------------------------------------
+// HASH PASSWORD
+// --------------------------------------------------
+
+userSchema.pre(
+  "save",
+  async function () {
+    if (
+      !this.isModified(
+        "password"
+      )
+    ) {
+      return;
+    }
+
+    const salt =
+      await bcrypt.genSalt(10);
+
+    this.password =
+      await bcrypt.hash(
+        this.password,
+        salt
+      );
+  }
+);
+
+// --------------------------------------------------
+// COMPARE PASSWORD
+// --------------------------------------------------
+
+userSchema.methods.comparePassword =
+  async function (
+    enteredPassword
+  ) {
+    return bcrypt.compare(
+      enteredPassword,
+      this.password
+    );
+  };
+
+module.exports =
+  mongoose.model(
+    "User",
+    userSchema
+  );

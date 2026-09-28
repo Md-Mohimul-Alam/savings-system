@@ -35,6 +35,7 @@ const addInvestment = async (req, res) => {
           : Number(investedAmount),
       startDate: startDate || new Date(),
       createdBy: req.user._id,
+      dataScope: req.dataScope,
     });
 
     await Transaction.create({
@@ -45,12 +46,14 @@ const addInvestment = async (req, res) => {
       referenceId: investment._id,
       description: `Investment created: ${investment.name}`,
       createdBy: req.user._id,
+      dataScope: req.dataScope,
     });
 
     const populatedInvestment =
-      await Investment.findById(
-        investment._id
-      ).populate("createdBy", "name email");
+      await Investment.findOne({
+        _id: investment._id,
+        dataScope: req.dataScope,
+      }).populate("createdBy", "name email");
 
     return res.status(201).json({
       success: true,
@@ -71,7 +74,9 @@ const getAllInvestments = async (req, res) => {
   try {
     const { status } = req.query;
 
-    const filter = {};
+    const filter = {
+      dataScope: req.dataScope,
+    };
 
     if (status) {
       filter.status = status;
@@ -83,6 +88,7 @@ const getAllInvestments = async (req, res) => {
 
     return res.status(200).json({
       success: true,
+      demoMode: req.user?.isDemo === true,
       count: investments.length,
       investments,
     });
@@ -99,9 +105,10 @@ const getAllInvestments = async (req, res) => {
 const getInvestmentById = async (req, res) => {
   try {
     const investment =
-      await Investment.findById(
-        req.params.id
-      ).populate("createdBy", "name email");
+      await Investment.findOne({
+        _id: req.params.id,
+        dataScope: req.dataScope,
+      }).populate("createdBy", "name email");
 
     if (!investment) {
       return res.status(404).json({
@@ -112,6 +119,7 @@ const getInvestmentById = async (req, res) => {
 
     return res.status(200).json({
       success: true,
+      demoMode: req.user?.isDemo === true,
       investment,
     });
   } catch (error) {
@@ -125,7 +133,10 @@ const getInvestmentById = async (req, res) => {
 const updateInvestment = async (req, res) => {
   try {
     const investment =
-      await Investment.findById(req.params.id);
+      await Investment.findOne({
+        _id: req.params.id,
+        dataScope: req.dataScope,
+      });
 
     if (!investment) {
       return res.status(404).json({

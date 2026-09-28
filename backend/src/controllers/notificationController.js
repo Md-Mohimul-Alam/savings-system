@@ -2,17 +2,22 @@ const Notification = require("../models/Notification");
 
 const getMyNotifications = async (req, res) => {
   try {
-    const notifications = await Notification.find({
+    const filter = {
       user: req.user._id,
-    }).sort({ createdAt: -1 });
+      dataScope: req.dataScope,
+    };
+
+    const notifications = await Notification.find(filter)
+      .sort({ createdAt: -1 });
 
     const unreadCount = await Notification.countDocuments({
-      user: req.user._id,
+      ...filter,
       isRead: false,
     });
 
     return res.status(200).json({
       success: true,
+      demoMode: req.user?.isDemo === true,
       unreadCount,
       notifications,
     });
@@ -31,6 +36,7 @@ const markAsRead = async (req, res) => {
     const notification = await Notification.findOne({
       _id: req.params.id,
       user: req.user._id,
+      dataScope: req.dataScope,
     });
 
     if (!notification) {
@@ -62,6 +68,7 @@ const markAllAsRead = async (req, res) => {
       {
         user: req.user._id,
         isRead: false,
+        dataScope: req.dataScope,
       },
       {
         $set: {

@@ -32,6 +32,7 @@ const generateAdminCode =
     const latestAdmin =
       await User.findOne({
         role: "admin",
+        isDemo: { $ne: true },
 
         adminCode: {
           $exists: true,
@@ -239,6 +240,7 @@ const registerUser =
         const adminCount =
           await User.countDocuments({
             role: "admin",
+            isDemo: { $ne: true },
           });
 
         if (
@@ -298,6 +300,9 @@ const registerUser =
             isAdmin
               ? adminCode
               : undefined,
+
+          isDemo: false,
+          dataScope: "live",
         });
 
       // -----------------------------------
@@ -341,6 +346,12 @@ const registerUser =
 
               status:
                 user.status,
+
+              isDemo:
+                user.isDemo === true,
+
+              dataScope:
+                user.dataScope || "live",
             },
           });
       }
@@ -389,6 +400,8 @@ const registerUser =
 
           status:
             "pending",
+
+          dataScope: "live",
         });
 
       return res
@@ -417,6 +430,13 @@ const registerUser =
 
             status:
               user.status,
+
+            isDemo:
+              user.isDemo === true,
+
+            dataScope:
+              user.dataScope ||
+              (user.isDemo ? "demo" : "live"),
           },
 
           joinRequest: {

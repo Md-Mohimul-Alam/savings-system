@@ -47,9 +47,10 @@ const addContribution = async (req, res) => {
       });
     }
 
-    const member = await Member.findById(
-      memberId
-    ).populate(
+    const member = await Member.findOne({
+      _id: memberId,
+      dataScope: req.dataScope,
+    }).populate(
       "user",
       "name email"
     );
@@ -66,6 +67,7 @@ const addContribution = async (req, res) => {
         member: memberId,
         month: Number(month),
         year: Number(year),
+        dataScope: req.dataScope,
       });
 
     if (existingContribution) {
@@ -97,6 +99,7 @@ const addContribution = async (req, res) => {
         expectedAmount,
         paidAmount: amount,
         status,
+        dataScope: req.dataScope,
         paymentDate:
           amount > 0 ? new Date() : null,
         note: note?.trim() || "",
@@ -118,6 +121,7 @@ const addContribution = async (req, res) => {
         referenceId: contribution._id,
         description: `Contribution for ${month}/${year}`,
         createdBy: req.user._id,
+        dataScope: req.dataScope,
       });
 
       if (member.user?._id) {
@@ -132,9 +136,10 @@ const addContribution = async (req, res) => {
     }
 
     const populatedContribution =
-      await Contribution.findById(
-        contribution._id
-      ).populate({
+      await Contribution.findOne({
+        _id: contribution._id,
+        dataScope: req.dataScope,
+      }).populate({
         path: "member",
         populate: {
           path: "user",
@@ -175,7 +180,7 @@ const getAllContributions = async (
       status,
     } = req.query;
 
-    const filter = {};
+    const filter = { dataScope: req.dataScope };
 
     if (month) {
       filter.month = Number(month);
@@ -233,9 +238,10 @@ const getContributionById = async (
 ) => {
   try {
     const contribution =
-      await Contribution.findById(
-        req.params.id
-      ).populate({
+      await Contribution.findOne({
+        _id: req.params.id,
+        dataScope: req.dataScope,
+      }).populate({
         path: "member",
         populate: {
           path: "user",
@@ -280,9 +286,10 @@ const updateContribution = async (
     } = req.body;
 
     const contribution =
-      await Contribution.findById(
-        req.params.id
-      );
+      await Contribution.findOne({
+        _id: req.params.id,
+        dataScope: req.dataScope,
+      });
 
     if (!contribution) {
       return res.status(404).json({
@@ -346,9 +353,10 @@ const updateContribution = async (
     const difference =
       newPaidAmount - oldPaidAmount;
 
-    const member = await Member.findById(
-      contribution.member
-    ).populate(
+    const member = await Member.findOne({
+      _id: contribution.member,
+      dataScope: req.dataScope,
+    }).populate(
       "user",
       "name email"
     );
@@ -388,6 +396,7 @@ const updateContribution = async (
             ? `Contribution increased for ${contribution.month}/${contribution.year}`
             : `Contribution reduced for ${contribution.month}/${contribution.year}`,
         createdBy: req.user._id,
+        dataScope: req.dataScope,
       });
     }
 
@@ -402,9 +411,10 @@ const updateContribution = async (
     }
 
     const populatedContribution =
-      await Contribution.findById(
-        contribution._id
-      ).populate({
+      await Contribution.findOne({
+        _id: contribution._id,
+        dataScope: req.dataScope,
+      }).populate({
         path: "member",
         populate: {
           path: "user",
@@ -436,6 +446,7 @@ const getMyContributions = async (req, res) => {
   try {
     const member = await Member.findOne({
       user: req.user._id,
+      dataScope: req.dataScope,
     });
 
     if (!member) {
@@ -448,6 +459,7 @@ const getMyContributions = async (req, res) => {
     const contributions =
       await Contribution.find({
         member: member._id,
+        dataScope: req.dataScope,
       })
         .populate({
           path: "member",

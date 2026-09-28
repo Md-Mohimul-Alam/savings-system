@@ -1,6 +1,12 @@
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 
+const READ_ONLY_METHODS = new Set([
+  "GET",
+  "HEAD",
+  "OPTIONS",
+]);
+
 const protect = async (req, res, next) => {
   try {
     let token;
@@ -19,7 +25,10 @@ const protect = async (req, res, next) => {
       });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(
+      token,
+      process.env.JWT_SECRET
+    );
 
     const user = await User.findById(decoded.id);
 
@@ -38,6 +47,23 @@ const protect = async (req, res, next) => {
     }
 
     req.user = user;
+
+    // Every protected controller can use this.
+    req.dataScope = user.isDemo ? "demo" : "live";
+
+    // Demo Admin can browse the complete admin UI,
+    // but cannot change anything, even through curl/Postman.
+    if (
+      user.isDemo &&
+      !READ_ONLY_METHODS.has(req.method)
+    ) {
+      return res.status(403).json({
+        success: false,
+        demoMode: true,
+        message:
+          "Demo Mode is read-only. Changes are disabled for the Demo Admin.",
+      });
+    }
 
     next();
   } catch (error) {

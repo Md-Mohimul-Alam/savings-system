@@ -32,6 +32,7 @@ const addExpense = async (req, res) => {
       expenseDate: expenseDate || new Date(),
       note: note || "",
       createdBy: req.user._id,
+      dataScope: req.dataScope,
     });
 
     await Transaction.create({
@@ -42,11 +43,13 @@ const addExpense = async (req, res) => {
       referenceId: expense._id,
       description: title.trim(),
       createdBy: req.user._id,
+      dataScope: req.dataScope,
     });
 
-    const populatedExpense = await Expense.findById(
-      expense._id
-    ).populate("createdBy", "name email");
+    const populatedExpense = await Expense.findOne({
+      _id: expense._id,
+      dataScope: req.dataScope,
+    }).populate("createdBy", "name email");
 
     return res.status(201).json({
       success: true,
@@ -71,7 +74,9 @@ const getAllExpenses = async (req, res) => {
       toDate,
     } = req.query;
 
-    const filter = {};
+    const filter = {
+      dataScope: req.dataScope,
+    };
 
     if (category) {
       filter.category = category;
@@ -98,6 +103,7 @@ const getAllExpenses = async (req, res) => {
 
     return res.status(200).json({
       success: true,
+      demoMode: req.user?.isDemo === true,
       count: expenses.length,
       expenses,
     });
@@ -113,9 +119,10 @@ const getAllExpenses = async (req, res) => {
 
 const getExpenseById = async (req, res) => {
   try {
-    const expense = await Expense.findById(
-      req.params.id
-    ).populate("createdBy", "name email");
+    const expense = await Expense.findOne({
+      _id: req.params.id,
+      dataScope: req.dataScope,
+    }).populate("createdBy", "name email");
 
     if (!expense) {
       return res.status(404).json({
@@ -126,6 +133,7 @@ const getExpenseById = async (req, res) => {
 
     return res.status(200).json({
       success: true,
+      demoMode: req.user?.isDemo === true,
       expense,
     });
   } catch (error) {
@@ -138,7 +146,10 @@ const getExpenseById = async (req, res) => {
 
 const updateExpense = async (req, res) => {
   try {
-    const expense = await Expense.findById(req.params.id);
+    const expense = await Expense.findOne({
+      _id: req.params.id,
+      dataScope: req.dataScope,
+    });
 
     if (!expense) {
       return res.status(404).json({
@@ -200,6 +211,7 @@ const updateExpense = async (req, res) => {
             ? `Expense increased: ${expense.title}`
             : `Expense reduced: ${expense.title}`,
         createdBy: req.user._id,
+        dataScope: req.dataScope,
       });
     }
 

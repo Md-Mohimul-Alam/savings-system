@@ -1,71 +1,88 @@
 const mongoose = require("mongoose");
+const bcrypt = require("bcryptjs");
 
-const memberSchema = new mongoose.Schema(
+const userSchema = new mongoose.Schema(
   {
-    user: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      required: true,
-      unique: true,
+    name: {
+      type: String,
+      required: [
+        true,
+        "Name is required",
+      ],
+      trim: true,
     },
 
-    memberCode: {
+    email: {
       type: String,
-      required: true,
+      required: [
+        true,
+        "Email is required",
+      ],
       unique: true,
+      lowercase: true,
       trim: true,
     },
 
     phone: {
       type: String,
+      required: [
+        true,
+        "Phone number is required",
+      ],
       trim: true,
     },
 
-    address: {
+    password: {
       type: String,
-      trim: true,
+      required: [
+        true,
+        "Password is required",
+      ],
+      minlength: 6,
+      select: false,
     },
 
-    monthlyContribution: {
-      type: Number,
-      default: 1000,
-      min: 0,
-    },
-
-    joinDate: {
-      type: Date,
-      default: Date.now,
-    },
-
-    membershipStatus: {
+    adminCode: {
       type: String,
-      enum: ["active", "inactive", "exited"],
-      default: "active",
-    },
-
-    totalContribution: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
-
-    ownershipPercentage: {
-      type: Number,
-      default: 0,
-      min: 0,
-      max: 100,
-    },
-    nidNumber: {
-      type: String,
-      trim: true,
-      default: "",
-    },
-
-    passportNumber: {
-      type: String,
+      unique: true,
+      sparse: true,
       trim: true,
       uppercase: true,
-      default: "",
+    },
+
+    role: {
+      type: String,
+      enum: [
+        "admin",
+        "member",
+      ],
+      default: "member",
+    },
+
+    status: {
+      type: String,
+      enum: [
+        "active",
+        "pending",
+        "suspended",
+      ],
+      default: "pending",
+    },
+
+    isDemo: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+
+    dataScope: {
+      type: String,
+      enum: [
+        "live",
+        "demo",
+      ],
+      default: "live",
+      index: true,
     },
   },
   {
@@ -73,4 +90,48 @@ const memberSchema = new mongoose.Schema(
   }
 );
 
-module.exports = mongoose.model("Member", memberSchema);
+// --------------------------------------------------
+// HASH PASSWORD
+// --------------------------------------------------
+
+userSchema.pre(
+  "save",
+  async function () {
+    if (
+      !this.isModified(
+        "password"
+      )
+    ) {
+      return;
+    }
+
+    const salt =
+      await bcrypt.genSalt(10);
+
+    this.password =
+      await bcrypt.hash(
+        this.password,
+        salt
+      );
+  }
+);
+
+// --------------------------------------------------
+// COMPARE PASSWORD
+// --------------------------------------------------
+
+userSchema.methods.comparePassword =
+  async function (
+    enteredPassword
+  ) {
+    return bcrypt.compare(
+      enteredPassword,
+      this.password
+    );
+  };
+
+module.exports =
+  mongoose.model(
+    "User",
+    userSchema
+  );

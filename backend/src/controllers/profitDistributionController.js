@@ -5,9 +5,35 @@ const ProfitDistribution = require(
 const Investment = require("../models/Investment");
 const Transaction = require("../models/Transaction");
 
-const calculateOwnership = require(
-  "../utils/calculateOwnership"
-);
+const Member = require("../models/Member");
+
+const calculateScopedOwnership = async (dataScope) => {
+  const members = await Member.find({
+    membershipStatus: "active",
+    dataScope,
+  })
+    .select("_id totalContribution")
+    .lean();
+
+  const totalGroupContribution = members.reduce(
+    (sum, member) =>
+      sum + Number(member.totalContribution || 0),
+    0
+  );
+
+  return {
+    totalGroupContribution,
+    ownershipData: members.map((member) => ({
+      memberId: member._id,
+      ownershipPercentage:
+        totalGroupContribution > 0
+          ? (Number(member.totalContribution || 0) /
+              totalGroupContribution) *
+            100
+          : 0,
+    })),
+  };
+};
 
 const distributeProfit = async (req, res) => {
   try {
@@ -33,9 +59,10 @@ const distributeProfit = async (req, res) => {
       });
     }
 
-    const investment = await Investment.findById(
-      investmentId
-    );
+    const investment = await Investment.findOne({
+      _id: investmentId,
+      dataScope: req.dataScope,
+    });
 
     if (!investment) {
       return res.status(404).json({
@@ -45,7 +72,7 @@ const distributeProfit = async (req, res) => {
     }
 
     const ownershipResult =
-      await calculateOwnership();
+      await calculateScopedOwnership(req.dataScope);
 
     if (
       !ownershipResult.ownershipData.length
@@ -82,6 +109,7 @@ const distributeProfit = async (req, res) => {
         members: memberShares,
         note: note || "",
         createdBy: req.user._id,
+        dataScope: req.dataScope,
       });
 
     await Transaction.create({
@@ -92,12 +120,14 @@ const distributeProfit = async (req, res) => {
       referenceId: distribution._id,
       description: `Profit received from ${investment.name}`,
       createdBy: req.user._id,
+      dataScope: req.dataScope,
     });
 
     const populatedDistribution =
-      await ProfitDistribution.findById(
-        distribution._id
-      )
+      await ProfitDistribution.findOne({
+        _id: distribution._id,
+        dataScope: req.dataScope,
+      })
         .populate(
           "investment",
           "name investedAmount currentValue"
@@ -140,7 +170,7 @@ const getAllProfitDistributions = async (
 ) => {
   try {
     const distributions =
-      await ProfitDistribution.find()
+      await ProfitDistribution.find({ dataScope: req.dataScope })
         .populate(
           "investment",
           "name investedAmount currentValue"
@@ -184,9 +214,10 @@ const getProfitDistributionById = async (
 ) => {
   try {
     const distribution =
-      await ProfitDistribution.findById(
-        req.params.id
-      )
+      await ProfitDistribution.findOne({
+        _id: req.params.id,
+        dataScope: req.dataScope,
+      })
         .populate(
           "investment",
           "name investedAmount currentValue"

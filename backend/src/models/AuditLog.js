@@ -1,45 +1,62 @@
 const mongoose = require("mongoose");
 
-const auditLogSchema = new mongoose.Schema(
-  {
-    user: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      default: null,
-    },
+const auditLogSchema =
+  new mongoose.Schema(
+    {
+      user: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        default: null,
+      },
 
-    action: {
-      type: String,
-      required: true,
-      trim: true,
-    },
+      action: {
+        type: String,
+        required: true,
+        trim: true,
+      },
 
-    method: {
-      type: String,
-      required: true,
-    },
+      method: {
+        type: String,
+        required: true,
+      },
 
-    endpoint: {
-      type: String,
-      required: true,
-    },
+      endpoint: {
+        type: String,
+        required: true,
+      },
 
-    ipAddress: {
-      type: String,
-      default: "",
-    },
+      ipAddress: {
+        type: String,
+        default: "",
+      },
 
-    statusCode: {
-      type: Number,
-      default: null,
-    },
-  },
-  {
-    timestamps: true,
-  }
-);
+      statusCode: {
+        type: Number,
+        default: null,
+      },
 
-module.exports = mongoose.model(
-  "AuditLog",
-  auditLogSchema
-);
+      dataScope: {
+        type: String,
+        enum: [
+          "live",
+          "demo",
+        ],
+        default: "live",
+        index: true,
+      },
+    },
+    {
+      timestamps: true,
+    }
+  );
+
+auditLogSchema.index({
+  dataScope: 1,
+  createdAt: -1,
+});
+
+module.exports =
+  mongoose.model(
+    "AuditLog",
+    auditLogSchema
+  );

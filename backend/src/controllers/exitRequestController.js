@@ -19,6 +19,7 @@ const createExitRequest = async (
 
     const member = await Member.findOne({
       user: req.user._id,
+      dataScope: req.dataScope,
     });
 
     if (!member) {
@@ -44,6 +45,7 @@ const createExitRequest = async (
         status: {
           $in: ["pending", "approved"],
         },
+        dataScope: req.dataScope,
       });
 
     if (existingRequest) {
@@ -66,6 +68,7 @@ const createExitRequest = async (
         status: "pending",
         estimatedPayout:
           payout.estimatedPayout,
+        dataScope: req.dataScope,
       });
 
     return res.status(201).json({
@@ -96,7 +99,7 @@ const getAllExitRequests = async (
   try {
     const { status } = req.query;
 
-    const filter = {};
+    const filter = { dataScope: req.dataScope };
 
     if (status) {
       filter.status = status;
@@ -144,6 +147,7 @@ const getMyExitRequest = async (
   try {
     const member = await Member.findOne({
       user: req.user._id,
+      dataScope: req.dataScope,
     });
 
     if (!member) {
@@ -156,6 +160,7 @@ const getMyExitRequest = async (
     const exitRequest =
       await ExitRequest.findOne({
         member: member._id,
+        dataScope: req.dataScope,
       })
         .populate(
           "reviewedBy",
@@ -197,7 +202,10 @@ const approveExitRequest = async (
     const { adminNote } = req.body;
 
     const exitRequest =
-      await ExitRequest.findById(id);
+      await ExitRequest.findOne({
+        _id: id,
+        dataScope: req.dataScope,
+      });
 
     if (!exitRequest) {
       return res.status(404).json({
@@ -231,9 +239,10 @@ const approveExitRequest = async (
 
     await exitRequest.save();
 
-    const member = await Member.findById(
-      exitRequest.member
-    ).populate(
+    const member = await Member.findOne({
+      _id: exitRequest.member,
+      dataScope: req.dataScope,
+    }).populate(
       "user",
       "name email"
     );
@@ -281,7 +290,10 @@ const rejectExitRequest = async (
     const { adminNote } = req.body;
 
     const exitRequest =
-      await ExitRequest.findById(id);
+      await ExitRequest.findOne({
+        _id: id,
+        dataScope: req.dataScope,
+      });
 
     if (!exitRequest) {
       return res.status(404).json({
@@ -308,9 +320,10 @@ const rejectExitRequest = async (
 
     await exitRequest.save();
 
-    const member = await Member.findById(
-      exitRequest.member
-    ).populate(
+    const member = await Member.findOne({
+      _id: exitRequest.member,
+      dataScope: req.dataScope,
+    }).populate(
       "user",
       "name email"
     );
@@ -356,7 +369,10 @@ const markExitAsPaid = async (
     const { id } = req.params;
 
     const exitRequest =
-      await ExitRequest.findById(id);
+      await ExitRequest.findOne({
+        _id: id,
+        dataScope: req.dataScope,
+      });
 
     if (!exitRequest) {
       return res.status(404).json({
@@ -387,9 +403,10 @@ const markExitAsPaid = async (
       });
     }
 
-    const member = await Member.findById(
-      exitRequest.member
-    ).populate(
+    const member = await Member.findOne({
+      _id: exitRequest.member,
+      dataScope: req.dataScope,
+    }).populate(
       "user",
       "name email"
     );
@@ -410,6 +427,7 @@ const markExitAsPaid = async (
       referenceId: exitRequest._id,
       description: `Final payout for member ${member.memberCode}`,
       createdBy: req.user._id,
+      dataScope: req.dataScope,
     });
 
     exitRequest.status = "paid";

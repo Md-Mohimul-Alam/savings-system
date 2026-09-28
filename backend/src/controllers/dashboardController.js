@@ -4,10 +4,6 @@ const Transaction = require("../models/Transaction");
 const Investment = require("../models/Investment");
 const Expense = require("../models/Expense");
 
-const {
-  calculateOwnership,
-} = require("../utils/calculateOwnership");
-
 // --------------------------------------------------
 // ADMIN DASHBOARD
 // --------------------------------------------------
@@ -34,15 +30,16 @@ const getAdminDashboard = async (
     ] = await Promise.all([
       Member.find({
         membershipStatus: "active",
+        dataScope: req.dataScope,
       }).lean(),
 
-      Contribution.find().lean(),
+      Contribution.find({ dataScope: req.dataScope }).lean(),
 
-      Transaction.find().lean(),
+      Transaction.find({ dataScope: req.dataScope }).lean(),
 
-      Investment.find().lean(),
+      Investment.find({ dataScope: req.dataScope }).lean(),
 
-      Expense.find().lean(),
+      Expense.find({ dataScope: req.dataScope }).lean(),
     ]);
 
     const totalMembers =
@@ -269,6 +266,7 @@ const getAdminDashboard = async (
     return res.status(200).json({
       success: true,
       role: "admin",
+      demoMode: req.user?.isDemo === true,
 
       summary: {
         totalMembers,
@@ -355,6 +353,7 @@ const getMemberDashboard = async (
     const member =
       await Member.findOne({
         user: req.user._id,
+        dataScope: req.dataScope,
       })
         .populate(
           "user",
@@ -397,6 +396,7 @@ const getMemberDashboard = async (
       // Current member contributions
       Contribution.find({
         member: member._id,
+        dataScope: req.dataScope,
       })
         .sort({
           year: 1,
@@ -407,6 +407,7 @@ const getMemberDashboard = async (
       // Active investments
       Investment.find({
         status: "active",
+        dataScope: req.dataScope,
       })
         .select(
           "name investedAmount currentValue status"
@@ -414,14 +415,14 @@ const getMemberDashboard = async (
         .lean(),
 
       // All contributions
-      Contribution.find()
+      Contribution.find({ dataScope: req.dataScope })
         .select(
           "paidAmount"
         )
         .lean(),
 
       // All expenses
-      Expense.find()
+      Expense.find({ dataScope: req.dataScope })
         .select(
           "amount"
         )
@@ -513,87 +514,19 @@ const getMemberDashboard = async (
       );
 
     // -----------------------------------
-    // Ownership
+    // Ownership - scoped to the current data set
     // -----------------------------------
 
-    let ownershipPercentage = 0;
-
-    try {
-      const ownershipResult =
-        await calculateOwnership();
-
-      console.log(
-        "Ownership calculation completed"
-      );
-
-      if (
-        ownershipResult &&
-        Array.isArray(
-          ownershipResult.ownershipData
-        )
-      ) {
-        const ownershipData =
-          ownershipResult
-            .ownershipData
-            .find(
-              (item) => {
-                const itemMemberId =
-                  item?.memberId
-                    ? String(
-                        item.memberId
-                      )
-                    : "";
-
-                return (
-                  itemMemberId ===
-                  String(
-                    member._id
-                  )
-                );
-              }
-            );
-
-        ownershipPercentage =
-          Number(
-            ownershipData
-              ?.ownershipPercentage ||
-              0
-          );
-      } else {
-        console.warn(
-          "calculateOwnership returned unexpected data:",
-          ownershipResult
-        );
-
-        ownershipPercentage =
-          Number(
-            member.ownershipPercentage ||
-              0
-          );
-      }
-    } catch (
-      ownershipError
-    ) {
-      console.error(
-        "Ownership calculation failed:",
-        {
-          name:
-            ownershipError?.name,
-
-          message:
-            ownershipError?.message,
-
-          stack:
-            ownershipError?.stack,
-        }
-      );
-
-      ownershipPercentage =
-        Number(
-          member.ownershipPercentage ||
-            0
-        );
-    }
+    const ownershipPercentage =
+      totalGroupSavings > 0
+        ? Number(
+            (
+              (totalContribution /
+                totalGroupSavings) *
+              100
+            ).toFixed(4)
+          )
+        : 0;
 
     // -----------------------------------
     // Investment share
@@ -646,6 +579,7 @@ const getMemberDashboard = async (
       success: true,
 
       role: "member",
+      demoMode: req.user?.isDemo === true,
 
       member: {
         memberCode:

@@ -7,9 +7,9 @@ const Member = require("../models/Member");
 // GENERATE MEMBER CODE
 // --------------------------------------------------
 
-const generateMemberCode = async () => {
+const generateMemberCode = async (dataScope = "live") => {
   const latestMember =
-    await Member.findOne()
+    await Member.findOne({ dataScope })
       .sort({ createdAt: -1 })
       .select("memberCode");
 
@@ -40,7 +40,7 @@ const getAllMembers = async (
 ) => {
   try {
     const members =
-      await Member.find()
+      await Member.find({ dataScope: req.dataScope })
         .populate(
           "user",
           "name email role status"
@@ -91,9 +91,10 @@ const getMemberById = async (
     }
 
     const member =
-      await Member.findById(
-        req.params.id
-      ).populate(
+      await Member.findOne({
+        _id: req.params.id,
+        dataScope: req.dataScope,
+      }).populate(
         "user",
         "name email role status"
       );
@@ -157,9 +158,10 @@ const approveUser = async (
     }
 
     const user =
-      await User.findById(
-        userId
-      );
+      await User.findOne({
+        _id: userId,
+        dataScope: req.dataScope,
+      });
 
     if (!user) {
       return res.status(404).json({
@@ -183,6 +185,7 @@ const approveUser = async (
     const existingMember =
       await Member.findOne({
         user: user._id,
+        dataScope: req.dataScope,
       });
 
     if (existingMember) {
@@ -194,7 +197,7 @@ const approveUser = async (
     }
 
     const memberCode =
-      await generateMemberCode();
+      await generateMemberCode(req.dataScope);
 
     /*
       Prefer values supplied during approval.
@@ -210,6 +213,8 @@ const approveUser = async (
           user._id,
 
         memberCode,
+
+        dataScope: req.dataScope,
 
         phone:
           phone !== undefined
@@ -269,9 +274,10 @@ const approveUser = async (
     await user.save();
 
     const populatedMember =
-      await Member.findById(
-        member._id
-      ).populate(
+      await Member.findOne({
+        _id: member._id,
+        dataScope: req.dataScope,
+      }).populate(
         "user",
         "name email role status"
       );
@@ -317,6 +323,8 @@ const getPendingUsers = async (
 
         status:
           "pending",
+
+        dataScope: req.dataScope,
       })
         .select(
           "-password"
@@ -376,9 +384,10 @@ const updateMember = async (
     }
 
     const member =
-      await Member.findById(
-        req.params.id
-      );
+      await Member.findOne({
+        _id: req.params.id,
+        dataScope: req.dataScope,
+      });
 
     if (!member) {
       return res.status(404).json({
@@ -500,9 +509,10 @@ const updateMember = async (
     await member.save();
 
     const updatedMember =
-      await Member.findById(
-        member._id
-      ).populate(
+      await Member.findOne({
+        _id: member._id,
+        dataScope: req.dataScope,
+      }).populate(
         "user",
         "name email role status"
       );
@@ -636,6 +646,7 @@ const updateMyMemberProfile =
         await Member.findOne({
           user:
             req.user._id,
+          dataScope: req.dataScope,
         });
 
       if (!member) {
@@ -713,9 +724,10 @@ const updateMyMemberProfile =
       await member.save();
 
       const updatedMember =
-        await Member.findById(
-          member._id
-        ).populate(
+        await Member.findOne({
+          _id: member._id,
+          dataScope: req.dataScope,
+        }).populate(
           "user",
           "name email role status createdAt"
         );
@@ -767,7 +779,10 @@ const deleteMember = async (req, res) => {
       });
     }
 
-    const member = await Member.findById(id);
+    const member = await Member.findOne({
+      _id: id,
+      dataScope: req.dataScope,
+    });
 
     if (!member) {
       return res.status(404).json({
@@ -776,17 +791,10 @@ const deleteMember = async (req, res) => {
       });
     }
 
-    const userId = member.user;
-
-    await Member.findByIdAndDelete(id);
-
-    // Optional:
-    // Also delete the linked user account.
-    // Keep this enabled only if deleting a member
-    // should completely remove their login account.
-    if (userId) {
-      await User.findByIdAndDelete(userId);
-    }
+    await Member.deleteOne({
+      _id: id,
+      dataScope: req.dataScope,
+    });
 
     return res.status(200).json({
       success: true,

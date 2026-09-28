@@ -8,7 +8,9 @@ const getAllTransactions = async (req, res) => {
       memberId,
     } = req.query;
 
-    const filter = {};
+    const filter = {
+      dataScope: req.dataScope,
+    };
 
     if (type) {
       filter.type = type;
@@ -38,6 +40,7 @@ const getAllTransactions = async (req, res) => {
 
     return res.status(200).json({
       success: true,
+      demoMode: req.user?.isDemo === true,
       count: transactions.length,
       transactions,
     });
@@ -53,18 +56,20 @@ const getAllTransactions = async (req, res) => {
 
 const getCashSummary = async (req, res) => {
   try {
-    const transactions = await Transaction.find();
+    const transactions = await Transaction.find({
+      dataScope: req.dataScope,
+    });
 
     let totalIn = 0;
     let totalOut = 0;
 
     transactions.forEach((transaction) => {
       if (transaction.direction === "IN") {
-        totalIn += transaction.amount;
+        totalIn += Number(transaction.amount || 0);
       }
 
       if (transaction.direction === "OUT") {
-        totalOut += transaction.amount;
+        totalOut += Number(transaction.amount || 0);
       }
     });
 
@@ -72,6 +77,7 @@ const getCashSummary = async (req, res) => {
 
     return res.status(200).json({
       success: true,
+      demoMode: req.user?.isDemo === true,
       summary: {
         totalIn,
         totalOut,

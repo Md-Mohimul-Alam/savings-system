@@ -8,8 +8,8 @@ const {
   createNotification,
 } = require("../services/notificationService");
 
-const generateMemberCode = async () => {
-  const latestMember = await Member.findOne()
+const generateMemberCode = async (dataScope = "live") => {
+  const latestMember = await Member.findOne({ dataScope })
     .sort({ createdAt: -1 })
     .select("memberCode");
 
@@ -33,6 +33,7 @@ const createJoinRequest = async (req, res) => {
 
     const existingMember = await Member.findOne({
       user: req.user._id,
+      dataScope: req.dataScope,
     });
 
     if (existingMember) {
@@ -46,6 +47,7 @@ const createJoinRequest = async (req, res) => {
       await JoinRequest.findOne({
         user: req.user._id,
         status: "pending",
+        dataScope: req.dataScope,
       });
 
     if (existingPendingRequest) {
@@ -62,6 +64,7 @@ const createJoinRequest = async (req, res) => {
       address: address?.trim() || "",
       reason: reason?.trim() || "",
       status: "pending",
+      dataScope: req.dataScope,
     });
 
     return res.status(201).json({
@@ -88,6 +91,7 @@ const getMyJoinRequest = async (req, res) => {
     const joinRequest =
       await JoinRequest.findOne({
         user: req.user._id,
+        dataScope: req.dataScope,
       })
         .populate(
           "reviewedBy",
@@ -126,7 +130,7 @@ const getAllJoinRequests = async (
   try {
     const { status } = req.query;
 
-    const filter = {};
+    const filter = { dataScope: req.dataScope };
 
     if (status) {
       filter.status = status;
@@ -178,7 +182,10 @@ const approveJoinRequest = async (
     }
 
     const joinRequest =
-      await JoinRequest.findById(id);
+      await JoinRequest.findOne({
+        _id: id,
+        dataScope: req.dataScope,
+      });
 
     if (!joinRequest) {
       return res.status(404).json({
@@ -195,9 +202,10 @@ const approveJoinRequest = async (
       });
     }
 
-    const user = await User.findById(
-      joinRequest.user
-    );
+    const user = await User.findOne({
+      _id: joinRequest.user,
+      dataScope: req.dataScope,
+    });
 
     if (!user) {
       return res.status(404).json({
@@ -210,6 +218,7 @@ const approveJoinRequest = async (
     const existingMember =
       await Member.findOne({
         user: user._id,
+        dataScope: req.dataScope,
       });
 
     if (existingMember) {
@@ -221,7 +230,7 @@ const approveJoinRequest = async (
     }
 
     const memberCode =
-      await generateMemberCode();
+      await generateMemberCode(req.dataScope);
 
     const member = await Member.create({
       user: user._id,
@@ -230,6 +239,7 @@ const approveJoinRequest = async (
       address: joinRequest.address || "",
       monthlyContribution: 1000,
       membershipStatus: "active",
+      dataScope: req.dataScope,
     });
 
     user.status = "active";
@@ -255,17 +265,19 @@ const approveJoinRequest = async (
     });
 
     const populatedMember =
-      await Member.findById(
-        member._id
-      ).populate(
+      await Member.findOne({
+        _id: member._id,
+        dataScope: req.dataScope,
+      }).populate(
         "user",
         "name email role status"
       );
 
     const populatedRequest =
-      await JoinRequest.findById(
-        joinRequest._id
-      )
+      await JoinRequest.findOne({
+        _id: joinRequest._id,
+        dataScope: req.dataScope,
+      })
         .populate(
           "user",
           "name email role status"
@@ -312,7 +324,10 @@ const rejectJoinRequest = async (
     }
 
     const joinRequest =
-      await JoinRequest.findById(id);
+      await JoinRequest.findOne({
+        _id: id,
+        dataScope: req.dataScope,
+      });
 
     if (!joinRequest) {
       return res.status(404).json({
@@ -351,9 +366,10 @@ const rejectJoinRequest = async (
     });
 
     const populatedRequest =
-      await JoinRequest.findById(
-        joinRequest._id
-      )
+      await JoinRequest.findOne({
+        _id: joinRequest._id,
+        dataScope: req.dataScope,
+      })
         .populate(
           "user",
           "name email role status"

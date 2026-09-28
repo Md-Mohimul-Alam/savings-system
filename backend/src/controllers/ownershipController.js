@@ -1,64 +1,58 @@
 const Member = require("../models/Member");
 const Investment = require("../models/Investment");
 
-const {
-  calculateOwnership,
-} = require("../utils/calculateOwnership");
-
 // --------------------------------------------------
-// SAFE OWNERSHIP CALCULATION
+// SCOPED OWNERSHIP CALCULATION
 // --------------------------------------------------
 
-const safeCalculateOwnership = async () => {
-  try {
-    const result =
-      await calculateOwnership();
+const calculateScopedOwnership = async (dataScope) => {
+  const members = await Member.find({
+    membershipStatus: "active",
+    dataScope,
+  })
+    .select(
+      "_id memberCode totalContribution ownershipPercentage"
+    )
+    .lean();
 
-    if (!result) {
-      console.warn(
-        "calculateOwnership returned no result"
-      );
-
-      return {
-        totalGroupContribution: 0,
-        ownershipData: [],
-      };
-    }
-
-    return {
-      totalGroupContribution:
-        Number(
-          result.totalGroupContribution ||
-            0
-        ),
-
-      ownershipData:
-        Array.isArray(
-          result.ownershipData
-        )
-          ? result.ownershipData
-          : [],
-    };
-  } catch (error) {
-    console.error(
-      "calculateOwnership failed:",
-      {
-        name:
-          error?.name,
-
-        message:
-          error?.message,
-
-        stack:
-          error?.stack,
-      }
+  const totalGroupContribution =
+    members.reduce(
+      (sum, member) =>
+        sum +
+        Number(member.totalContribution || 0),
+      0
     );
 
-    return {
-      totalGroupContribution: 0,
-      ownershipData: [],
-    };
-  }
+  const ownershipData =
+    members.map((member) => {
+      const contribution =
+        Number(member.totalContribution || 0);
+
+      const ownershipPercentage =
+        totalGroupContribution > 0
+          ? Number(
+              (
+                (contribution /
+                  totalGroupContribution) *
+                100
+              ).toFixed(4)
+            )
+          : 0;
+
+      return {
+        memberId: member._id,
+        memberCode:
+          member.memberCode || "",
+        totalContribution:
+          contribution,
+        ownershipPercentage,
+      };
+    });
+
+  return {
+    totalGroupContribution,
+    ownershipData,
+  };
 };
 
 // --------------------------------------------------
@@ -69,55 +63,35 @@ const findMemberOwnership = (
   ownershipData,
   member
 ) => {
-  if (
-    !Array.isArray(
-      ownershipData
-    )
-  ) {
-    return Number(
-      member?.ownershipPercentage ||
-        0
-    );
-  }
-
   const item =
     ownershipData.find(
       (ownership) =>
         String(
-          ownership?.memberId ||
-            ""
+          ownership?.memberId || ""
         ) ===
-        String(
-          member?._id ||
-            ""
-        )
+        String(member?._id || "")
     );
 
-  if (item) {
-    return Number(
-      item.ownershipPercentage ||
-        0
-    );
-  }
-
-  // Fallback to saved value
   return Number(
-    member?.ownershipPercentage ||
+    item?.ownershipPercentage ||
+      member?.ownershipPercentage ||
       0
   );
 };
 
 // --------------------------------------------------
-// CREATE INVESTMENT SHARES
+// BUILD INVESTMENT SHARES
 // --------------------------------------------------
 
 const buildInvestmentShares =
   async (
-    ownershipPercentage
+    ownershipPercentage,
+    dataScope
   ) => {
     const investments =
       await Investment.find({
         status: "active",
+        dataScope,
       })
         .select(
           "name investedAmount currentValue status"
@@ -149,16 +123,11 @@ const buildInvestmentShares =
         return {
           investmentId:
             investment._id,
-
           name:
             investment.name,
-
           investedAmount,
-
           currentValue,
-
           memberShare,
-
           status:
             investment.status,
         };
@@ -177,46 +146,34 @@ const getOwnershipSummary =
   ) => {
     try {
       const result =
-        await safeCalculateOwnership();
+        await calculateScopedOwnership(
+          req.dataScope
+        );
 
       return res
         .status(200)
         .json({
           success: true,
-
+          demoMode:
+            req.user?.isDemo === true,
           totalGroupContribution:
             result.totalGroupContribution,
-
           ownershipData:
             result.ownershipData,
         });
     } catch (error) {
       console.error(
         "Get ownership summary error:",
-        {
-          name:
-            error?.name,
-
-          message:
-            error?.message,
-
-          stack:
-            error?.stack,
-        }
+        error
       );
 
       return res
         .status(500)
         .json({
           success: false,
-
           message:
             error?.message ||
             "Failed to get ownership summary",
-
-          errorName:
-            error?.name ||
-            "UnknownError",
         });
     }
   };
@@ -231,9 +188,8 @@ const getMemberOwnership =
     res
   ) => {
     try {
-      const {
-        memberId,
-      } = req.params;
+      const { memberId } =
+        req.params;
 
       if (!memberId) {
         return res
@@ -246,9 +202,11 @@ const getMemberOwnership =
       }
 
       const member =
-        await Member.findById(
-          memberId
-        )
+        await Member.findOne({
+          _id: memberId,
+          dataScope:
+            req.dataScope,
+        })
           .populate(
             "user",
             "name email"
@@ -266,79 +224,67 @@ const getMemberOwnership =
       }
 
       const ownershipResult =
-        await safeCalculateOwnership();
+        await calculateScopedOwnership(
+          req.dataScope
+        );
 
       const ownershipPercentage =
         findMemberOwnership(
-          ownershipResult.ownershipData,
+          ownershipResult
+            .ownershipData,
           member
         );
 
       const investmentShares =
         await buildInvestmentShares(
-          ownershipPercentage
+          ownershipPercentage,
+          req.dataScope
         );
 
       return res
         .status(200)
         .json({
           success: true,
+          demoMode:
+            req.user?.isDemo === true,
 
           member: {
             _id:
               member._id,
-
             memberCode:
               member.memberCode ||
               "",
-
             totalContribution:
               Number(
                 member.totalContribution ||
                   0
               ),
-
             ownershipPercentage,
-
             user:
               member.user ||
               null,
           },
 
           totalGroupContribution:
-            ownershipResult.totalGroupContribution,
+            ownershipResult
+              .totalGroupContribution,
 
           ownershipPercentage,
-
           investmentShares,
         });
     } catch (error) {
       console.error(
         "Get member ownership error:",
-        {
-          name:
-            error?.name,
-
-          message:
-            error?.message,
-
-          stack:
-            error?.stack,
-        }
+        error
       );
 
       return res
         .status(500)
         .json({
           success: false,
-
           message:
             error?.message ||
             "Failed to get member ownership",
-
-          errorName:
-            error?.name ||
-            "UnknownError",
         });
     }
   };
@@ -353,9 +299,7 @@ const getMyOwnership =
     res
   ) => {
     try {
-      if (
-        !req.user?._id
-      ) {
+      if (!req.user?._id) {
         return res
           .status(401)
           .json({
@@ -365,17 +309,12 @@ const getMyOwnership =
           });
       }
 
-      console.log(
-        "Loading ownership for user:",
-        String(
-          req.user._id
-        )
-      );
-
       const member =
         await Member.findOne({
           user:
             req.user._id,
+          dataScope:
+            req.dataScope,
         })
           .populate(
             "user",
@@ -388,102 +327,73 @@ const getMyOwnership =
           .status(404)
           .json({
             success: false,
-
             message:
               "Member profile not found",
           });
       }
 
-      console.log(
-        "Member ownership profile:",
-        String(
-          member._id
-        )
-      );
-
       const ownershipResult =
-        await safeCalculateOwnership();
+        await calculateScopedOwnership(
+          req.dataScope
+        );
 
       const ownershipPercentage =
         findMemberOwnership(
-          ownershipResult.ownershipData,
+          ownershipResult
+            .ownershipData,
           member
         );
 
-      console.log(
-        "Member ownership percentage:",
-        ownershipPercentage
-      );
-
       const investmentShares =
         await buildInvestmentShares(
-          ownershipPercentage
+          ownershipPercentage,
+          req.dataScope
         );
 
       return res
         .status(200)
         .json({
           success: true,
+          demoMode:
+            req.user?.isDemo === true,
 
           member: {
             _id:
               member._id,
-
             memberCode:
               member.memberCode ||
               "",
-
             totalContribution:
               Number(
                 member.totalContribution ||
                   0
               ),
-
             ownershipPercentage,
-
             user:
               member.user ||
               null,
           },
 
           totalGroupContribution:
-            ownershipResult.totalGroupContribution,
+            ownershipResult
+              .totalGroupContribution,
 
           ownershipPercentage,
-
           investmentShares,
         });
     } catch (error) {
       console.error(
-        "GET MY OWNERSHIP FATAL ERROR:",
-        {
-          name:
-            error?.name,
-
-          message:
-            error?.message,
-
-          stack:
-            error?.stack,
-
-          userId:
-            req.user?._id,
-        }
+        "Get my ownership error:",
+        error
       );
 
-      // Temporary detailed production error
       return res
         .status(500)
         .json({
           success: false,
-
           message:
             error?.message ||
             "Failed to get ownership",
-
-          errorName:
-            error?.name ||
-            "UnknownError",
         });
     }
   };
@@ -499,7 +409,9 @@ const syncOwnershipPercentages =
   ) => {
     try {
       const result =
-        await safeCalculateOwnership();
+        await calculateScopedOwnership(
+          req.dataScope
+        );
 
       if (
         !Array.isArray(
@@ -512,13 +424,10 @@ const syncOwnershipPercentages =
           .status(200)
           .json({
             success: true,
-
             message:
               "No ownership data available to sync",
-
             totalGroupContribution:
               result.totalGroupContribution,
-
             ownershipData: [],
           });
       }
@@ -531,14 +440,21 @@ const syncOwnershipPercentages =
           )
           .map(
             (item) =>
-              Member.findByIdAndUpdate(
-                item.memberId,
+              Member.updateOne(
                 {
-                  ownershipPercentage:
-                    Number(
-                      item.ownershipPercentage ||
-                        0
-                    ),
+                  _id:
+                    item.memberId,
+                  dataScope:
+                    req.dataScope,
+                },
+                {
+                  $set: {
+                    ownershipPercentage:
+                      Number(
+                        item.ownershipPercentage ||
+                          0
+                      ),
+                  },
                 }
               )
           );
@@ -551,43 +467,26 @@ const syncOwnershipPercentages =
         .status(200)
         .json({
           success: true,
-
           message:
             "Ownership percentages synced successfully",
-
           totalGroupContribution:
             result.totalGroupContribution,
-
           ownershipData:
             result.ownershipData,
         });
     } catch (error) {
       console.error(
         "Sync ownership error:",
-        {
-          name:
-            error?.name,
-
-          message:
-            error?.message,
-
-          stack:
-            error?.stack,
-        }
+        error
       );
 
       return res
         .status(500)
         .json({
           success: false,
-
           message:
             error?.message ||
             "Failed to sync ownership percentages",
-
-          errorName:
-            error?.name ||
-            "UnknownError",
         });
     }
   };

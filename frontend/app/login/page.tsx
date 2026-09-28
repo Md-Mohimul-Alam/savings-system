@@ -216,6 +216,23 @@ export default function LoginPage() {
             Create an account
           </Link>
         </p>
+        <div className="mt-8 text-center">
+          <p className="text-xs text-gray-500">
+            FAME&apos;S Organization Savings Management System
+          </p>
+
+          <p className="mt-1 text-xs text-gray-400">
+            Designed &amp; Developed by{" "}
+            <a
+              href="https://mohim-portfolio.netlify.app/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-semibold text-gray-600 hover:text-gray-900 hover:underline"
+            >
+              Md Mohimul Alam
+            </a>
+          </p>
+        </div>
       </div>
     </main>
   );

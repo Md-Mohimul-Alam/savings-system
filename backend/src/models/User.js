@@ -68,11 +68,31 @@ const userSchema = new mongoose.Schema(
       ],
       default: "pending",
     },
+
+    isDemo: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+
+    dataScope: {
+      type: String,
+      enum: [
+        "live",
+        "demo",
+      ],
+      default: "live",
+      index: true,
+    },
   },
   {
     timestamps: true,
   }
 );
+
+// --------------------------------------------------
+// HASH PASSWORD
+// --------------------------------------------------
 
 userSchema.pre(
   "save",
@@ -95,6 +115,10 @@ userSchema.pre(
       );
   }
 );
+
+// --------------------------------------------------
+// COMPARE PASSWORD
+// --------------------------------------------------
 
 userSchema.methods.comparePassword =
   async function (

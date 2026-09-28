@@ -3,7 +3,7 @@ const AuditLog = require("../models/AuditLog");
 const auditMiddleware = (req, res, next) => {
   res.on("finish", async () => {
     try {
-      // Don't log normal GET requests
+      // Normal GET requests are not written to audit history.
       if (req.method === "GET") {
         return;
       }
@@ -14,19 +14,17 @@ const auditMiddleware = (req, res, next) => {
 
       await AuditLog.create({
         user: req.user._id,
-
         action: `${req.method} ${req.originalUrl}`,
-
         method: req.method,
-
         endpoint: req.originalUrl,
-
         ipAddress:
           req.headers["x-forwarded-for"] ||
           req.socket?.remoteAddress ||
           "",
-
         statusCode: res.statusCode,
+        dataScope:
+          req.dataScope ||
+          (req.user.isDemo ? "demo" : "live"),
       });
     } catch (error) {
       console.error(
