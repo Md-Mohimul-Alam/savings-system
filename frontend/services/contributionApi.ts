@@ -1,4 +1,5 @@
 import api from "./api";
+import { assertWritable } from "./demoMode";
 
 export const getContributions = async (params?: {
   month?: number;
@@ -20,6 +21,8 @@ export const addContribution = async (data: {
   paidAmount: number;
   note?: string;
 }) => {
+  assertWritable();
+
   const response = await api.post("/contributions", data);
 
   return response.data;
@@ -32,20 +35,15 @@ export const updateContribution = async (
     note?: string;
   }
 ) => {
-  const response = await api.patch(
-    `/contributions/${id}`,
-    data
-  );
+  assertWritable();
+
+  const response = await api.patch(`/contributions/${id}`, data);
 
   return response.data;
 };
 
-export const getMyContributions =
-  async () => {
-    const response =
-      await api.get(
-        "/contributions/my"
-      );
+export const getMyContributions = async () => {
+  const response = await api.get("/contributions/my");
 
-    return response.data;
-  };
+  return response.data;
+};

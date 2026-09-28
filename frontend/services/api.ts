@@ -1,4 +1,8 @@
-import axios from "axios";
+import axios, {
+  AxiosError,
+  InternalAxiosRequestConfig,
+} from "axios";
+import { clearAuthSession } from "./demoMode";
 
 const api = axios.create({
   baseURL:
@@ -10,16 +14,45 @@ const api = axios.create({
   },
 });
 
-api.interceptors.request.use((config) => {
-  if (typeof window !== "undefined") {
-    const token = localStorage.getItem("token");
+api.interceptors.request.use(
+  (config: InternalAxiosRequestConfig) => {
+    if (typeof window !== "undefined") {
+      const token = localStorage.getItem("token");
 
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
     }
-  }
 
-  return config;
-});
+    return config;
+  }
+);
+
+api.interceptors.response.use(
+  (response) => response,
+  (
+    error: AxiosError<{
+      success?: boolean;
+      message?: string;
+      demoMode?: boolean;
+    }>
+  ) => {
+    const status = error.response?.status;
+    const data = error.response?.data;
+
+    if (status === 403 && data?.demoMode) {
+      console.warn(
+        data.message ||
+          "Demo Mode is read-only. Changes are disabled."
+      );
+    }
+
+    if (status === 401) {
+      clearAuthSession();
+    }
+
+    return Promise.reject(error);
+  }
+);
 
 export default api;

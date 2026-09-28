@@ -1,43 +1,28 @@
 import api from "./api";
+import { assertWritable } from "./demoMode";
 
-export const getOwnershipSummary =
-  async () => {
-    const response =
-      await api.get(
-        "/ownership"
-      );
+export const getOwnershipSummary = async () => {
+  const response = await api.get("/ownership");
 
-    return response.data;
-  };
+  return response.data;
+};
 
-export const getMemberOwnership =
-  async (
-    memberId: string
-  ) => {
-    const response =
-      await api.get(
-        `/ownership/member/${memberId}`
-      );
+export const getMemberOwnership = async (memberId: string) => {
+  const response = await api.get(`/ownership/member/${memberId}`);
 
-    return response.data;
-  };
+  return response.data;
+};
 
-export const getMyOwnership =
-  async () => {
-    const response =
-      await api.get(
-        "/ownership/me"
-      );
+export const getMyOwnership = async () => {
+  const response = await api.get("/ownership/me");
 
-    return response.data;
-  };
+  return response.data;
+};
 
-export const syncOwnership =
-  async () => {
-    const response =
-      await api.post(
-        "/ownership/sync"
-      );
+export const syncOwnership = async () => {
+  assertWritable();
 
-    return response.data;
-  };
+  const response = await api.post("/ownership/sync");
+
+  return response.data;
+};

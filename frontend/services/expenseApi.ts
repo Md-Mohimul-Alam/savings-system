@@ -1,4 +1,5 @@
 import api from "./api";
+import { assertWritable } from "./demoMode";
 
 export const getExpenses = async (params?: {
   category?: string;
@@ -19,6 +20,8 @@ export const addExpense = async (data: {
   expenseDate?: string;
   note?: string;
 }) => {
+  assertWritable();
+
   const response = await api.post("/expenses", data);
 
   return response.data;

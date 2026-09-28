@@ -1,4 +1,5 @@
 import api from "./api";
+import { assertWritable } from "./demoMode";
 
 export const getMembers = async () => {
   const response = await api.get("/members");
@@ -17,20 +18,17 @@ export const approveUser = async (
     address?: string;
   }
 ) => {
-  const response = await api.post(
-    `/members/approve/${userId}`,
-    data
-  );
+  assertWritable();
+
+  const response = await api.post(`/members/approve/${userId}`, data);
 
   return response.data;
 };
 
-export const deleteMember = async (
-  memberId: string
-) => {
-  const response = await api.delete(
-    `/members/${memberId}`
-  );
+export const deleteMember = async (memberId: string) => {
+  assertWritable();
+
+  const response = await api.delete(`/members/${memberId}`);
 
   return response.data;
 };

@@ -1,4 +1,5 @@
 import api from "./api";
+import { assertWritable } from "./demoMode";
 
 export const getProfitDistributions = async () => {
   const response = await api.get("/profit-distributions");
@@ -11,10 +12,9 @@ export const createProfitDistribution = async (data: {
   totalProfit: number;
   note?: string;
 }) => {
-  const response = await api.post(
-    "/profit-distributions",
-    data
-  );
+  assertWritable();
+
+  const response = await api.post("/profit-distributions", data);
 
   return response.data;
 };

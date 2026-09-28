@@ -1,33 +1,28 @@
 import api from "./api";
+import { assertWritable } from "./demoMode";
 
-export const getMyNotifications =
-  async () => {
-    const response =
-      await api.get(
-        "/notifications"
-      );
+export const getMyNotifications = async () => {
+  const response = await api.get("/notifications");
 
-    return response.data;
-  };
+  return response.data;
+};
 
-export const markNotificationAsRead =
-  async (
-    notificationId: string
-  ) => {
-    const response =
-      await api.patch(
-        `/notifications/${notificationId}/read`
-      );
+export const markNotificationAsRead = async (
+  notificationId: string
+) => {
+  assertWritable();
 
-    return response.data;
-  };
+  const response = await api.patch(
+    `/notifications/${notificationId}/read`
+  );
 
-export const markAllNotificationsAsRead =
-  async () => {
-    const response =
-      await api.patch(
-        "/notifications/read-all"
-      );
+  return response.data;
+};
 
-    return response.data;
-  };
+export const markAllNotificationsAsRead = async () => {
+  assertWritable();
+
+  const response = await api.patch("/notifications/read-all");
+
+  return response.data;
+};
