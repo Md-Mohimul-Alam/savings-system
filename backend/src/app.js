@@ -10,40 +10,62 @@ const transactionRoutes = require("./routes/transactionRoutes");
 const expenseRoutes = require("./routes/expenseRoutes");
 const investmentRoutes = require("./routes/investmentRoutes");
 const ownershipRoutes = require("./routes/ownershipRoutes");
+
 const profitDistributionRoutes = require(
   "./routes/profitDistributionRoutes"
 );
-const joinRequestRoutes = require("./routes/joinRequestRoutes");
-const exitRequestRoutes = require("./routes/exitRequestRoutes");
-const dashboardRoutes = require("./routes/dashboardRoutes");
-const notificationRoutes = require("./routes/notificationRoutes");
-const auditRoutes = require("./routes/auditRoutes");
+
+const joinRequestRoutes = require(
+  "./routes/joinRequestRoutes"
+);
+
+const exitRequestRoutes = require(
+  "./routes/exitRequestRoutes"
+);
+
+const dashboardRoutes = require(
+  "./routes/dashboardRoutes"
+);
+
+const notificationRoutes = require(
+  "./routes/notificationRoutes"
+);
+
+const auditRoutes = require(
+  "./routes/auditRoutes"
+);
 
 const app = express();
 
-// Allowed frontend origins
 const allowedOrigins = [
   "http://localhost:3000",
-  "http://127.0.0.1:3000",
-  "http://localhost:3001",
-  "http://127.0.0.1:3001",
+  "https://savings-system-coral.vercel.app/login"
 ];
 
-// CORS
+if (process.env.FRONTEND_URL) {
+  allowedOrigins.push(
+    process.env.FRONTEND_URL
+  );
+}
+
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests from Postman, curl, mobile apps, etc.
+      // Postman, curl, server-to-server
       if (!origin) {
         return callback(null, true);
       }
 
-      if (allowedOrigins.includes(origin)) {
+      if (
+        allowedOrigins.includes(origin)
+      ) {
         return callback(null, true);
       }
 
       return callback(
-        new Error(`CORS blocked for origin: ${origin}`)
+        new Error(
+          `CORS blocked for origin: ${origin}`
+        )
       );
     },
 
@@ -65,52 +87,101 @@ app.use(
   })
 );
 
-// Body parsers
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 
-// Cookie parser
+app.use(
+  express.urlencoded({
+    extended: true,
+  })
+);
+
 app.use(cookieParser());
 
-// Health check
 app.get("/", (req, res) => {
   return res.status(200).json({
     success: true,
-    message: "Group Savings API is running",
+    message:
+      "Group Savings API is running",
   });
 });
 
+app.get(
+  "/api/health",
+  (req, res) => {
+    return res.status(200).json({
+      success: true,
+      message: "API is healthy",
+    });
+  }
+);
+
 // API Routes
-app.use("/api/auth", authRoutes);
+app.use(
+  "/api/auth",
+  authRoutes
+);
 
-app.use("/api/members", memberRoutes);
+app.use(
+  "/api/members",
+  memberRoutes
+);
 
-app.use("/api/contributions", contributionRoutes);
+app.use(
+  "/api/contributions",
+  contributionRoutes
+);
 
-app.use("/api/transactions", transactionRoutes);
+app.use(
+  "/api/transactions",
+  transactionRoutes
+);
 
-app.use("/api/expenses", expenseRoutes);
+app.use(
+  "/api/expenses",
+  expenseRoutes
+);
 
-app.use("/api/investments", investmentRoutes);
+app.use(
+  "/api/investments",
+  investmentRoutes
+);
 
-app.use("/api/ownership", ownershipRoutes);
+app.use(
+  "/api/ownership",
+  ownershipRoutes
+);
 
 app.use(
   "/api/profit-distributions",
   profitDistributionRoutes
 );
 
-app.use("/api/join-requests", joinRequestRoutes);
+app.use(
+  "/api/join-requests",
+  joinRequestRoutes
+);
 
-app.use("/api/exit-requests", exitRequestRoutes);
+app.use(
+  "/api/exit-requests",
+  exitRequestRoutes
+);
 
-app.use("/api/dashboard", dashboardRoutes);
+app.use(
+  "/api/dashboard",
+  dashboardRoutes
+);
 
-app.use("/api/notifications", notificationRoutes);
+app.use(
+  "/api/notifications",
+  notificationRoutes
+);
 
-app.use("/api/audit-logs", auditRoutes);
+app.use(
+  "/api/audit-logs",
+  auditRoutes
+);
 
-// 404 Handler
+// 404
 app.use((req, res) => {
   return res.status(404).json({
     success: false,
@@ -118,14 +189,25 @@ app.use((req, res) => {
   });
 });
 
-// Global Error Handler
-app.use((err, req, res, next) => {
-  console.error("Unhandled error:", err);
+// Error handler
+app.use(
+  (err, req, res, next) => {
+    console.error(
+      "Unhandled error:",
+      err
+    );
 
-  return res.status(err.status || 500).json({
-    success: false,
-    message: err.message || "Internal server error",
-  });
-});
+    return res
+      .status(
+        err.status || 500
+      )
+      .json({
+        success: false,
+        message:
+          err.message ||
+          "Internal server error",
+      });
+  }
+);
 
 module.exports = app;
