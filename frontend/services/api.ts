@@ -1,7 +1,10 @@
 import axios from "axios";
 
 const api = axios.create({
-  baseURL: "https://savings-system-api.vercel.app/api",
+  baseURL:
+    process.env.NEXT_PUBLIC_API_URL ||
+    "https://savings-system-api.vercel.app/api",
+
   headers: {
     "Content-Type": "application/json",
   },
