@@ -6,19 +6,22 @@ const createNotification = async ({
   message,
   type = "INFO",
   link = "",
+  dataScope = "live",
 }) => {
   try {
     if (!user) {
       return null;
     }
 
-    const notification = await Notification.create({
-      user,
-      title,
-      message,
-      type,
-      link,
-    });
+    const notification =
+      await Notification.create({
+        user,
+        title,
+        message,
+        type,
+        link,
+        dataScope,
+      });
 
     return notification;
   } catch (error) {
