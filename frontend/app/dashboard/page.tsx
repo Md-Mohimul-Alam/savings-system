@@ -71,6 +71,9 @@ interface MemberDashboardData {
     outstandingContribution: number;
     ownershipPercentage: number;
     totalInvestmentShare: number;
+
+    totalGroupSavings: number;
+    totalExpenses: number;
   };
 
   currentMonth: {
@@ -78,7 +81,10 @@ interface MemberDashboardData {
     year: number;
     expectedAmount: number;
     paidAmount: number;
-    status: "paid" | "partial" | "due";
+    status:
+      | "paid"
+      | "partial"
+      | "due";
   };
 
   charts: {
@@ -103,14 +109,29 @@ type CardTone =
   | "slate";
 
 export default function DashboardPage() {
-  const [data, setData] =
-    useState<DashboardData | null>(null);
+  const [
+    data,
+    setData,
+  ] =
+    useState<DashboardData | null>(
+      null
+    );
 
-  const [loading, setLoading] =
-    useState(true);
+  const [
+    loading,
+    setLoading,
+  ] =
+    useState(
+      true
+    );
 
-  const [error, setError] =
-    useState("");
+  const [
+    error,
+    setError,
+  ] =
+    useState(
+      ""
+    );
 
   useEffect(() => {
     const loadDashboard =
@@ -122,9 +143,12 @@ export default function DashboardPage() {
             await getDashboardSummary();
 
           setData(result);
-        } catch (error: any) {
+        } catch (
+          error: any
+        ) {
           setError(
-            error?.response?.data?.message ||
+            error?.response?.data
+              ?.message ||
               "Failed to load dashboard"
           );
         } finally {
@@ -136,7 +160,9 @@ export default function DashboardPage() {
   }, []);
 
   if (loading) {
-    return <DashboardLoading />;
+    return (
+      <DashboardLoading />
+    );
   }
 
   if (error) {
@@ -157,25 +183,37 @@ export default function DashboardPage() {
     return null;
   }
 
-  if (data.role === "admin") {
+  if (
+    data.role ===
+    "admin"
+  ) {
     return (
       <AdminDashboard
-        data={data}
+        data={
+          data
+        }
       />
     );
   }
 
   return (
     <MemberDashboard
-      data={data}
+      data={
+        data
+      }
     />
   );
 }
 
+// --------------------------------------------------
+// ADMIN DASHBOARD
+// --------------------------------------------------
+
 function AdminDashboard({
   data,
 }: {
-  data: AdminDashboardData;
+  data:
+    AdminDashboardData;
 }) {
   const {
     totalMembers,
@@ -185,13 +223,15 @@ function AdminDashboard({
     totalInvestmentValue,
     totalProfitLoss,
     totalExpenses,
-  } = data.summary;
+  } =
+    data.summary;
 
   const month =
     data.currentMonth;
 
   const collectionRate =
-    month.expectedAmount > 0
+    month.expectedAmount >
+    0
       ? Math.min(
           100,
           Math.round(
@@ -223,8 +263,10 @@ function AdminDashboard({
             </h1>
 
             <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-500 sm:text-base">
-              Monitor savings, investments,
-              expenses and member activity
+              Monitor savings,
+              investments,
+              expenses and
+              member activity
               from one place.
             </p>
           </div>
@@ -238,7 +280,9 @@ function AdminDashboard({
               {formatMonth(
                 month.month
               )}{" "}
-              {month.year}
+              {
+                month.year
+              }
             </p>
           </div>
         </div>
@@ -248,49 +292,69 @@ function AdminDashboard({
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <SummaryCard
           title="Total Savings"
-          value={`৳${totalSavings.toLocaleString()}`}
+          value={`৳${Number(
+            totalSavings ||
+              0
+          ).toLocaleString()}`}
           description="Total member contributions"
           tone="blue"
         />
 
         <SummaryCard
           title="Available Cash"
-          value={`৳${availableCash.toLocaleString()}`}
+          value={`৳${Number(
+            availableCash ||
+              0
+          ).toLocaleString()}`}
           description="Current liquid balance"
           tone="green"
         />
 
         <SummaryCard
           title="Total Invested"
-          value={`৳${totalInvested.toLocaleString()}`}
+          value={`৳${Number(
+            totalInvested ||
+              0
+          ).toLocaleString()}`}
           description="Capital currently invested"
           tone="purple"
         />
 
         <SummaryCard
           title="Total Members"
-          value={totalMembers.toString()}
+          value={Number(
+            totalMembers ||
+              0
+          ).toLocaleString()}
           description="Active group members"
           tone="slate"
         />
 
         <SummaryCard
           title="Investment Value"
-          value={`৳${totalInvestmentValue.toLocaleString()}`}
+          value={`৳${Number(
+            totalInvestmentValue ||
+              0
+          ).toLocaleString()}`}
           description="Current portfolio value"
           tone="cyan"
         />
 
         <SummaryCard
           title="Profit / Loss"
-          value={`৳${totalProfitLoss.toLocaleString()}`}
+          value={`৳${Number(
+            totalProfitLoss ||
+              0
+          ).toLocaleString()}`}
           description={
-            totalProfitLoss >= 0
+            totalProfitLoss >=
+            0
               ? "Current portfolio gain"
               : "Current portfolio loss"
           }
           tone={
-            totalProfitLoss >= 0
+            totalProfitLoss >=
+            0
               ? "green"
               : "red"
           }
@@ -298,7 +362,10 @@ function AdminDashboard({
 
         <SummaryCard
           title="Total Expenses"
-          value={`৳${totalExpenses.toLocaleString()}`}
+          value={`৳${Number(
+            totalExpenses ||
+              0
+          ).toLocaleString()}`}
           description="Recorded operating expenses"
           tone="orange"
         />
@@ -317,7 +384,9 @@ function AdminDashboard({
                 {formatMonth(
                   month.month
                 )}{" "}
-                {month.year}
+                {
+                  month.year
+                }
               </h2>
             </div>
 
@@ -328,7 +397,10 @@ function AdminDashboard({
                 </span>
 
                 <span className="font-semibold text-gray-900">
-                  {collectionRate}%
+                  {
+                    collectionRate
+                  }
+                  %
                 </span>
               </div>
 
@@ -347,32 +419,50 @@ function AdminDashboard({
         <div className="grid gap-px bg-gray-200 sm:grid-cols-2 xl:grid-cols-3">
           <MonthlyStat
             title="Expected"
-            value={`৳${month.expectedAmount.toLocaleString()}`}
+            value={`৳${Number(
+              month.expectedAmount ||
+                0
+            ).toLocaleString()}`}
           />
 
           <MonthlyStat
             title="Collected"
-            value={`৳${month.collectedAmount.toLocaleString()}`}
+            value={`৳${Number(
+              month.collectedAmount ||
+                0
+            ).toLocaleString()}`}
           />
 
           <MonthlyStat
             title="Outstanding"
-            value={`৳${month.outstandingAmount.toLocaleString()}`}
+            value={`৳${Number(
+              month.outstandingAmount ||
+                0
+            ).toLocaleString()}`}
           />
 
           <MonthlyStat
             title="Paid Members"
-            value={month.paidMembers.toString()}
+            value={Number(
+              month.paidMembers ||
+                0
+            ).toLocaleString()}
           />
 
           <MonthlyStat
             title="Partial Members"
-            value={month.partialMembers.toString()}
+            value={Number(
+              month.partialMembers ||
+                0
+            ).toLocaleString()}
           />
 
           <MonthlyStat
             title="Due Members"
-            value={month.dueMembers.toString()}
+            value={Number(
+              month.dueMembers ||
+                0
+            ).toLocaleString()}
           />
         </div>
       </section>
@@ -391,7 +481,8 @@ function AdminDashboard({
 
         <DashboardCharts
           monthlySavings={
-            data.charts.monthlySavings
+            data.charts
+              .monthlySavings
           }
           investmentPerformance={
             data.charts
@@ -403,10 +494,15 @@ function AdminDashboard({
   );
 }
 
+// --------------------------------------------------
+// MEMBER DASHBOARD
+// --------------------------------------------------
+
 function MemberDashboard({
   data,
 }: {
-  data: MemberDashboardData;
+  data:
+    MemberDashboardData;
 }) {
   const {
     totalContribution,
@@ -414,13 +510,17 @@ function MemberDashboard({
     outstandingContribution,
     ownershipPercentage,
     totalInvestmentShare,
-  } = data.summary;
+    totalGroupSavings,
+    totalExpenses,
+  } =
+    data.summary;
 
   const month =
     data.currentMonth;
 
   const monthlyProgress =
-    month.expectedAmount > 0
+    month.expectedAmount >
+    0
       ? Math.min(
           100,
           Math.round(
@@ -445,15 +545,18 @@ function MemberDashboard({
 
             <h1 className="text-3xl font-bold tracking-tight text-gray-950 sm:text-4xl">
               Welcome
-              {data.member.name
+              {data.member
+                .name
                 ? `, ${data.member.name}`
                 : ""}
             </h1>
 
             <p className="mt-2 text-sm leading-6 text-gray-500 sm:text-base">
               View your savings,
-              contribution history,
-              ownership and investment share.
+              contribution
+              history, ownership
+              and investment
+              share.
             </p>
           </div>
 
@@ -490,58 +593,123 @@ function MemberDashboard({
       </section>
 
       {/* Member stats */}
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        <SummaryCard
-          title="My Contribution"
-          value={`৳${totalContribution.toLocaleString()}`}
-          description="Total amount contributed"
-          tone="blue"
-        />
+      <section>
+        <div className="mb-4">
+          <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+            My Account
+          </p>
 
-        <SummaryCard
-          title="Expected Contribution"
-          value={`৳${expectedContribution.toLocaleString()}`}
-          description="Expected contribution total"
-          tone="purple"
-        />
+          <h2 className="mt-1 text-xl font-bold text-gray-900">
+            Personal Financial Summary
+          </h2>
+        </div>
 
-        <SummaryCard
-          title="Outstanding"
-          value={`৳${outstandingContribution.toLocaleString()}`}
-          description="Remaining unpaid contribution"
-          tone={
-            outstandingContribution >
-            0
-              ? "orange"
-              : "green"
-          }
-        />
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <SummaryCard
+            title="My Contribution"
+            value={`৳${Number(
+              totalContribution ||
+                0
+            ).toLocaleString()}`}
+            description="Total amount contributed"
+            tone="blue"
+          />
 
-        <SummaryCard
-          title="Ownership"
-          value={`${Number(
-            ownershipPercentage
-          ).toFixed(2)}%`}
-          description="Your current group ownership"
-          tone="cyan"
-        />
+          <SummaryCard
+            title="Expected Contribution"
+            value={`৳${Number(
+              expectedContribution ||
+                0
+            ).toLocaleString()}`}
+            description="Expected contribution total"
+            tone="purple"
+          />
 
-        <SummaryCard
-          title="Investment Share"
-          value={`৳${totalInvestmentShare.toLocaleString()}`}
-          description="Your estimated investment share"
-          tone="green"
-        />
+          <SummaryCard
+            title="Outstanding"
+            value={`৳${Number(
+              outstandingContribution ||
+                0
+            ).toLocaleString()}`}
+            description="Remaining unpaid contribution"
+            tone={
+              outstandingContribution >
+              0
+                ? "orange"
+                : "green"
+            }
+          />
 
-        <SummaryCard
-          title="Monthly Target"
-          value={`৳${Number(
-            data.member
-              .monthlyContribution
-          ).toLocaleString()}`}
-          description="Regular monthly contribution"
-          tone="slate"
-        />
+          <SummaryCard
+            title="Ownership"
+            value={`${Number(
+              ownershipPercentage ||
+                0
+            ).toFixed(2)}%`}
+            description="Your current group ownership"
+            tone="cyan"
+          />
+
+          <SummaryCard
+            title="Investment Share"
+            value={`৳${Number(
+              totalInvestmentShare ||
+                0
+            ).toLocaleString()}`}
+            description="Your estimated investment share"
+            tone="green"
+          />
+
+          <SummaryCard
+            title="Monthly Target"
+            value={`৳${Number(
+              data.member
+                .monthlyContribution ||
+                0
+            ).toLocaleString()}`}
+            description="Regular monthly contribution"
+            tone="slate"
+          />
+        </div>
+      </section>
+
+      {/* Organization overview */}
+      <section>
+        <div className="mb-4">
+          <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+            Organization Overview
+          </p>
+
+          <h2 className="mt-1 text-xl font-bold text-gray-900">
+            Group Financial Summary
+          </h2>
+
+          <p className="mt-1 text-sm text-gray-500">
+            Overall savings and expenses of the organization.
+          </p>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <SummaryCard
+            title="Total Group Savings"
+            value={`৳${Number(
+              totalGroupSavings ||
+                0
+            ).toLocaleString()}`}
+            description="Total contributions from all members"
+            tone="green"
+          />
+
+          <SummaryCard
+            title="Total Expenses"
+            value={`৳${Number(
+              totalExpenses ||
+                0
+            ).toLocaleString()}`}
+            description="Total recorded organization expenses"
+            tone="orange"
+          />
+        </div>
       </section>
 
       {/* Current month */}
@@ -556,24 +724,34 @@ function MemberDashboard({
               {formatMonth(
                 month.month
               )}{" "}
-              {month.year}
+              {
+                month.year
+              }
             </h2>
           </div>
 
           <StatusBadge
-            status={month.status}
+            status={
+              month.status
+            }
           />
         </div>
 
         <div className="mt-6 grid gap-4 sm:grid-cols-3">
           <MiniCard
             title="Expected"
-            value={`৳${month.expectedAmount.toLocaleString()}`}
+            value={`৳${Number(
+              month.expectedAmount ||
+                0
+            ).toLocaleString()}`}
           />
 
           <MiniCard
             title="Paid"
-            value={`৳${month.paidAmount.toLocaleString()}`}
+            value={`৳${Number(
+              month.paidAmount ||
+                0
+            ).toLocaleString()}`}
           />
 
           <MiniCard
@@ -608,9 +786,12 @@ function MemberDashboard({
 
         <DashboardCharts
           monthlySavings={
-            data.charts.monthlySavings
+            data.charts
+              .monthlySavings
           }
-          investmentPerformance={[]}
+          investmentPerformance={
+            []
+          }
           showInvestmentChart={
             false
           }
@@ -619,6 +800,10 @@ function MemberDashboard({
     </div>
   );
 }
+
+// --------------------------------------------------
+// SUMMARY CARD
+// --------------------------------------------------
 
 function SummaryCard({
   title,
@@ -639,38 +824,52 @@ function SummaryCard({
     }
   > = {
     blue: {
-      dot: "bg-blue-500",
-      soft: "bg-blue-50",
+      dot:
+        "bg-blue-500",
+      soft:
+        "bg-blue-50",
     },
 
     green: {
-      dot: "bg-emerald-500",
-      soft: "bg-emerald-50",
+      dot:
+        "bg-emerald-500",
+      soft:
+        "bg-emerald-50",
     },
 
     purple: {
-      dot: "bg-violet-500",
-      soft: "bg-violet-50",
+      dot:
+        "bg-violet-500",
+      soft:
+        "bg-violet-50",
     },
 
     orange: {
-      dot: "bg-orange-500",
-      soft: "bg-orange-50",
+      dot:
+        "bg-orange-500",
+      soft:
+        "bg-orange-50",
     },
 
     red: {
-      dot: "bg-red-500",
-      soft: "bg-red-50",
+      dot:
+        "bg-red-500",
+      soft:
+        "bg-red-50",
     },
 
     cyan: {
-      dot: "bg-cyan-500",
-      soft: "bg-cyan-50",
+      dot:
+        "bg-cyan-500",
+      soft:
+        "bg-cyan-50",
     },
 
     slate: {
-      dot: "bg-gray-700",
-      soft: "bg-gray-100",
+      dot:
+        "bg-gray-700",
+      soft:
+        "bg-gray-100",
     },
   };
 
@@ -708,6 +907,10 @@ function SummaryCard({
   );
 }
 
+// --------------------------------------------------
+// MONTHLY STAT
+// --------------------------------------------------
+
 function MonthlyStat({
   title,
   value,
@@ -727,6 +930,10 @@ function MonthlyStat({
     </div>
   );
 }
+
+// --------------------------------------------------
+// MINI CARD
+// --------------------------------------------------
 
 function MiniCard({
   title,
@@ -748,10 +955,17 @@ function MiniCard({
   );
 }
 
+// --------------------------------------------------
+// STATUS BADGE
+// --------------------------------------------------
+
 function StatusBadge({
   status,
 }: {
-  status: "paid" | "partial" | "due";
+  status:
+    | "paid"
+    | "partial"
+    | "due";
 }) {
   const styles = {
     paid:
@@ -773,29 +987,45 @@ function StatusBadge({
   );
 }
 
+// --------------------------------------------------
+// LOADING
+// --------------------------------------------------
+
 function DashboardLoading() {
   return (
     <div className="animate-pulse space-y-8">
       <div>
         <div className="h-8 w-64 rounded bg-gray-200" />
+
         <div className="mt-3 h-4 w-80 max-w-full rounded bg-gray-100" />
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {Array.from({
-          length: 7,
-        }).map((_, index) => (
-          <div
-            key={index}
-            className="h-36 rounded-2xl border border-gray-200 bg-white"
-          />
-        ))}
+          length: 8,
+        }).map(
+          (
+            _,
+            index
+          ) => (
+            <div
+              key={
+                index
+              }
+              className="h-36 rounded-2xl border border-gray-200 bg-white"
+            />
+          )
+        )}
       </div>
 
       <div className="h-72 rounded-2xl border border-gray-200 bg-white" />
     </div>
   );
 }
+
+// --------------------------------------------------
+// FORMAT MONTH
+// --------------------------------------------------
 
 function formatMonth(
   month: number
@@ -816,7 +1046,8 @@ function formatMonth(
   ];
 
   return (
-    months[month - 1] ||
-    ""
+    months[
+      month - 1
+    ] || ""
   );
 }

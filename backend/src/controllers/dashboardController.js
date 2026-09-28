@@ -313,9 +313,11 @@ const getAdminDashboard = async (
 
     return res.status(500).json({
       success: false,
+
       message:
         error?.message ||
         "Failed to load dashboard",
+
       errorName:
         error?.name ||
         "UnknownError",
@@ -340,6 +342,7 @@ const getMemberDashboard = async (
     if (!req.user?._id) {
       return res.status(401).json({
         success: false,
+
         message:
           "Authentication required",
       });
@@ -362,6 +365,7 @@ const getMemberDashboard = async (
     if (!member) {
       return res.status(404).json({
         success: false,
+
         message:
           "Member profile not found. Please contact admin.",
       });
@@ -381,13 +385,16 @@ const getMemberDashboard = async (
       now.getFullYear();
 
     // -----------------------------------
-    // Load member data
+    // Load member + organization data
     // -----------------------------------
 
     const [
       contributions,
       investments,
+      allContributions,
+      expenses,
     ] = await Promise.all([
+      // Current member contributions
       Contribution.find({
         member: member._id,
       })
@@ -397,11 +404,26 @@ const getMemberDashboard = async (
         })
         .lean(),
 
+      // Active investments
       Investment.find({
         status: "active",
       })
         .select(
           "name investedAmount currentValue status"
+        )
+        .lean(),
+
+      // All contributions
+      Contribution.find()
+        .select(
+          "paidAmount"
+        )
+        .lean(),
+
+      // All expenses
+      Expense.find()
+        .select(
+          "amount"
         )
         .lean(),
     ]);
@@ -416,8 +438,18 @@ const getMemberDashboard = async (
       investments.length
     );
 
+    console.log(
+      "All contributions:",
+      allContributions.length
+    );
+
+    console.log(
+      "Expenses:",
+      expenses.length
+    );
+
     // -----------------------------------
-    // Contribution calculations
+    // Member contribution calculations
     // -----------------------------------
 
     const totalContribution =
@@ -457,9 +489,31 @@ const getMemberDashboard = async (
       );
 
     // -----------------------------------
+    // Organization totals
+    // -----------------------------------
+
+    const totalGroupSavings =
+      allContributions.reduce(
+        (sum, item) =>
+          sum +
+          Number(
+            item.paidAmount || 0
+          ),
+        0
+      );
+
+    const totalExpenses =
+      expenses.reduce(
+        (sum, item) =>
+          sum +
+          Number(
+            item.amount || 0
+          ),
+        0
+      );
+
+    // -----------------------------------
     // Ownership
-    // Ownership errors should NOT crash
-    // the member dashboard.
     // -----------------------------------
 
     let ownershipPercentage = 0;
@@ -510,6 +564,12 @@ const getMemberDashboard = async (
           "calculateOwnership returned unexpected data:",
           ownershipResult
         );
+
+        ownershipPercentage =
+          Number(
+            member.ownershipPercentage ||
+              0
+          );
       }
     } catch (
       ownershipError
@@ -528,7 +588,11 @@ const getMemberDashboard = async (
         }
       );
 
-      ownershipPercentage = 0;
+      ownershipPercentage =
+        Number(
+          member.ownershipPercentage ||
+            0
+        );
     }
 
     // -----------------------------------
@@ -558,7 +622,7 @@ const getMemberDashboard = async (
       );
 
     // -----------------------------------
-    // Savings chart
+    // Member savings chart
     // -----------------------------------
 
     const monthlySavings =
@@ -575,11 +639,12 @@ const getMemberDashboard = async (
       );
 
     // -----------------------------------
-    // Member response
+    // Response
     // -----------------------------------
 
     return res.status(200).json({
       success: true,
+
       role: "member",
 
       member: {
@@ -612,6 +677,10 @@ const getMemberDashboard = async (
         ownershipPercentage,
 
         totalInvestmentShare,
+
+        totalGroupSavings,
+
+        totalExpenses,
       },
 
       currentMonth: {
@@ -662,16 +731,6 @@ const getMemberDashboard = async (
       }
     );
 
-    /*
-      TEMPORARY:
-      Return the actual error message
-      so production errors can be diagnosed.
-
-      After the issue is fixed,
-      you can change this back to:
-      "Failed to load dashboard"
-    */
-
     return res.status(500).json({
       success: false,
 
@@ -698,6 +757,7 @@ const getDashboardSummary = async (
     if (!req.user) {
       return res.status(401).json({
         success: false,
+
         message:
           "Authentication required",
       });
@@ -734,6 +794,7 @@ const getDashboardSummary = async (
 
     return res.status(403).json({
       success: false,
+
       message:
         "Invalid user role",
     });
@@ -754,9 +815,11 @@ const getDashboardSummary = async (
 
     return res.status(500).json({
       success: false,
+
       message:
         error?.message ||
         "Failed to load dashboard",
+
       errorName:
         error?.name ||
         "UnknownError",
