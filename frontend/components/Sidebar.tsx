@@ -30,8 +30,18 @@ interface User {
   id: string;
   name: string;
   email: string;
-  role: "admin" | "member";
+
+  role:
+    | "admin"
+    | "member";
+
   status: string;
+
+  isDemo?: boolean;
+
+  dataScope?:
+    | "live"
+    | "demo";
 }
 
 interface MenuItem {
@@ -39,108 +49,193 @@ interface MenuItem {
   href: string;
 }
 
-const adminMenu: MenuItem[] = [
-  {
-    name: "Dashboard",
-    href: "/dashboard",
-  },
-  {
-    name: "Members",
-    href: "/dashboard/members",
-  },
-  {
-    name: "Contributions",
-    href: "/dashboard/contributions",
-  },
-  {
-    name: "Transactions",
-    href: "/dashboard/transactions",
-  },
-  {
-    name: "Investments",
-    href: "/dashboard/investments",
-  },
-  {
-    name: "Expenses",
-    href: "/dashboard/expenses",
-  },
-  {
-    name: "Ownership",
-    href: "/dashboard/ownership",
-  },
-  {
-    name: "Profit Distribution",
-    href: "/dashboard/profits",
-  },
-  {
-    name: "Join Requests",
-    href: "/dashboard/join-requests",
-  },
-  {
-    name: "Exit Requests",
-    href: "/dashboard/exit-requests",
-  },
-  {
-    name: "Reports",
-    href: "/dashboard/reports",
-  },
-  {
-    name: "Notifications",
-    href: "/dashboard/notifications",
-  },
-  {
-    name: "Audit Logs",
-    href: "/dashboard/audit-logs",
-  },
-];
+// --------------------------------------------------
+// ADMIN MENU
+// --------------------------------------------------
 
-const memberMenu: MenuItem[] = [
-  {
-    name: "Dashboard",
-    href: "/dashboard",
-  },
-  {
-    name: "My Profile",
-    href: "/dashboard/profile",
-  },
-  {
-    name: "My Contributions",
-    href: "/dashboard/my-contributions",
-  },
-  {
-    name: "My Ownership",
-    href: "/dashboard/my-ownership",
-  },
-  {
-    name: "Investments",
-    href: "/dashboard/investments",
-  },
-  {
-    name: "Exit Request",
-    href: "/dashboard/my-exit-request",
-  },
-  {
-    name: "Notifications",
-    href: "/dashboard/notifications",
-  },
-];
+const adminMenu: MenuItem[] =
+  [
+    {
+      name:
+        "Dashboard",
+      href:
+        "/dashboard",
+    },
+
+    {
+      name:
+        "Members",
+      href:
+        "/dashboard/members",
+    },
+
+    {
+      name:
+        "Contributions",
+      href:
+        "/dashboard/contributions",
+    },
+
+    {
+      name:
+        "Transactions",
+      href:
+        "/dashboard/transactions",
+    },
+
+    {
+      name:
+        "Investments",
+      href:
+        "/dashboard/investments",
+    },
+
+    {
+      name:
+        "Expenses",
+      href:
+        "/dashboard/expenses",
+    },
+
+    {
+      name:
+        "Ownership",
+      href:
+        "/dashboard/ownership",
+    },
+
+    {
+      name:
+        "Profit Distribution",
+      href:
+        "/dashboard/profits",
+    },
+
+    {
+      name:
+        "Join Requests",
+      href:
+        "/dashboard/join-requests",
+    },
+
+    {
+      name:
+        "Exit Requests",
+      href:
+        "/dashboard/exit-requests",
+    },
+
+    {
+      name:
+        "Reports",
+      href:
+        "/dashboard/reports",
+    },
+
+    {
+      name:
+        "Notifications",
+      href:
+        "/dashboard/notifications",
+    },
+
+    {
+      name:
+        "Audit Logs",
+      href:
+        "/dashboard/audit-logs",
+    },
+  ];
+
+// --------------------------------------------------
+// MEMBER MENU
+// --------------------------------------------------
+
+const memberMenu: MenuItem[] =
+  [
+    {
+      name:
+        "Dashboard",
+      href:
+        "/dashboard",
+    },
+
+    {
+      name:
+        "My Profile",
+      href:
+        "/dashboard/profile",
+    },
+
+    {
+      name:
+        "My Contributions",
+      href:
+        "/dashboard/my-contributions",
+    },
+
+    {
+      name:
+        "My Ownership",
+      href:
+        "/dashboard/my-ownership",
+    },
+
+    {
+      name:
+        "Investments",
+      href:
+        "/dashboard/investments",
+    },
+
+    {
+      name:
+        "Exit Request",
+      href:
+        "/dashboard/my-exit-request",
+    },
+
+    {
+      name:
+        "Notifications",
+      href:
+        "/dashboard/notifications",
+    },
+  ];
 
 export default function Sidebar({
   open,
   onClose,
 }: SidebarProps) {
-  const pathname = usePathname();
-  const router = useRouter();
+  const pathname =
+    usePathname();
 
-  const [user, setUser] =
-    useState<User | null>(null);
+  const router =
+    useRouter();
 
-  const [unreadCount, setUnreadCount] =
+  const [
+    user,
+    setUser,
+  ] =
+    useState<User | null>(
+      null
+    );
+
+  const [
+    unreadCount,
+    setUnreadCount,
+  ] =
     useState(0);
+
+  // --------------------------------------------------
+  // LOAD USER
+  // --------------------------------------------------
 
   useEffect(() => {
     const savedUser =
-      localStorage.getItem("user");
+      localStorage.getItem(
+        "user"
+      );
 
     if (!savedUser) {
       return;
@@ -148,18 +243,30 @@ export default function Sidebar({
 
     try {
       const parsedUser: User =
-        JSON.parse(savedUser);
+        JSON.parse(
+          savedUser
+        );
 
-      setUser(parsedUser);
-    } catch (error) {
+      setUser(
+        parsedUser
+      );
+    } catch (
+      error
+    ) {
       console.error(
         "Failed to parse saved user:",
         error
       );
 
-      setUser(null);
+      setUser(
+        null
+      );
     }
   }, []);
+
+  // --------------------------------------------------
+  // NOTIFICATION COUNT
+  // --------------------------------------------------
 
   useEffect(() => {
     const loadNotifications =
@@ -169,9 +276,12 @@ export default function Sidebar({
             await getMyNotifications();
 
           setUnreadCount(
-            data.unreadCount || 0
+            data.unreadCount ||
+              0
           );
-        } catch (error) {
+        } catch (
+          error
+        ) {
           console.error(
             "Failed to load notification count:",
             error
@@ -194,25 +304,53 @@ export default function Sidebar({
     };
   }, [pathname]);
 
+  // --------------------------------------------------
+  // MENU
+  // --------------------------------------------------
+
   const menuItems =
-    user?.role === "admin"
+    user?.role ===
+    "admin"
       ? adminMenu
       : memberMenu;
 
-  const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
+  const isDemo =
+    user?.isDemo ===
+    true;
 
-    router.push("/login");
-  };
+  // --------------------------------------------------
+  // LOGOUT
+  // --------------------------------------------------
+
+  const handleLogout =
+    () => {
+      localStorage.removeItem(
+        "token"
+      );
+
+      localStorage.removeItem(
+        "user"
+      );
+
+      localStorage.removeItem(
+        "isDemo"
+      );
+
+      router.push(
+        "/login"
+      );
+    };
 
   return (
     <>
+      {/* Mobile Overlay */}
       {open && (
         <button
           type="button"
           aria-label="Close sidebar overlay"
-          onClick={onClose}
+          onClick={
+            onClose
+          }
           className="fixed inset-0 z-40 bg-black/40 lg:hidden"
         />
       )}
@@ -231,6 +369,7 @@ export default function Sidebar({
           }
         `}
       >
+
         {/* Header */}
         <div className="shrink-0 border-b border-gray-200 p-5">
           <div className="flex items-start justify-between gap-4">
@@ -238,21 +377,28 @@ export default function Sidebar({
               <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
                 <Image
                   src="/logo.png"
-                  alt="Group Savings Logo"
-                  width={44}
-                  height={44}
+                  alt="FAME'S Organization Logo"
+                  width={
+                    44
+                  }
+                  height={
+                    44
+                  }
                   priority
-                  className="h-full w-full object-cover"
+                  className="h-full w-full object-contain"
                 />
               </div>
 
               <div className="min-w-0">
                 <h1 className="truncate text-lg font-bold text-gray-900">
-                  Group Savings
+                  FAME&apos;S
                 </h1>
 
                 <p className="mt-0.5 text-xs text-gray-500">
-                  {user?.role === "admin"
+                  {isDemo
+                    ? "Demo Admin Portal"
+                    : user?.role ===
+                      "admin"
                     ? "Admin Portal"
                     : "Member Portal"}
                 </p>
@@ -261,7 +407,9 @@ export default function Sidebar({
 
             <button
               type="button"
-              onClick={onClose}
+              onClick={
+                onClose
+              }
               aria-label="Close sidebar"
               className="shrink-0 text-2xl leading-none text-gray-500 transition hover:text-gray-900 focus:text-gray-900 focus:outline-none lg:hidden"
             >
@@ -269,24 +417,55 @@ export default function Sidebar({
             </button>
           </div>
 
+          {/* User */}
           {user && (
-            <div className="mt-4 rounded-xl border border-gray-100 bg-gray-50 p-3">
-              <p className="truncate text-sm font-semibold text-gray-900">
-                {user.name}
-              </p>
+            <div
+              className={`mt-4 rounded-xl border p-3 ${
+                isDemo
+                  ? "border-amber-200 bg-amber-50"
+                  : "border-gray-100 bg-gray-50"
+              }`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-gray-900">
+                    {
+                      user.name
+                    }
+                  </p>
 
-              <p className="mt-1 truncate text-xs text-gray-500">
-                {user.email}
-              </p>
+                  <p className="mt-1 truncate text-xs text-gray-500">
+                    {
+                      user.email
+                    }
+                  </p>
+                </div>
+
+                {isDemo && (
+                  <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-800">
+                    Demo
+                  </span>
+                )}
+              </div>
 
               <div className="mt-2 flex flex-wrap gap-2">
                 <span className="rounded-full bg-gray-200 px-2 py-0.5 text-xs font-medium capitalize text-gray-700">
-                  {user.role}
+                  {
+                    user.role
+                  }
                 </span>
 
                 <span className="rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium capitalize text-green-700">
-                  {user.status}
+                  {
+                    user.status
+                  }
                 </span>
+
+                {isDemo && (
+                  <span className="rounded-full border border-amber-300 bg-white px-2 py-0.5 text-xs font-medium text-amber-700">
+                    Read Only
+                  </span>
+                )}
               </div>
             </div>
           )}
@@ -294,93 +473,126 @@ export default function Sidebar({
 
         {/* Navigation */}
         <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto p-4">
-          {menuItems.map((item) => {
-            const active =
-              pathname === item.href ||
-              (
-                item.href !== "/dashboard" &&
-                pathname.startsWith(
-                  `${item.href}/`
-                )
-              );
+          {menuItems.map(
+            (
+              item
+            ) => {
+              const active =
+                pathname ===
+                  item.href ||
+                (
+                  item.href !==
+                    "/dashboard" &&
+                  pathname.startsWith(
+                    `${item.href}/`
+                  )
+                );
 
-            const isNotification =
-              item.href ===
-              "/dashboard/notifications";
+              const isNotification =
+                item.href ===
+                "/dashboard/notifications";
 
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={onClose}
-                style={{
-                  color: active
-                    ? "#ffffff"
-                    : "#374151",
-                }}
-                className={`
-                  group
-                  flex items-center justify-between
-                  rounded-lg px-4 py-3
-                  text-sm font-medium
-                  transition-colors duration-200
-                  outline-none
-                  focus-visible:ring-2
-                  focus-visible:ring-gray-400
-                  focus-visible:ring-offset-2
-                  ${
-                    active
-                      ? "bg-black hover:bg-black focus:bg-black"
-                      : "bg-transparent hover:bg-gray-100 focus:bg-gray-100"
+              return (
+                <Link
+                  key={
+                    item.href
                   }
-                `}
-              >
-                <span
+                  href={
+                    item.href
+                  }
+                  onClick={
+                    onClose
+                  }
                   style={{
-                    color: active
-                      ? "#ffffff"
-                      : "#374151",
+                    color:
+                      active
+                        ? "#ffffff"
+                        : "#374151",
                   }}
-                  className={
-                    active
-                      ? "text-white"
-                      : "text-gray-700 group-hover:text-gray-900 group-focus:text-gray-900"
-                  }
+                  className={`
+                    group
+                    flex items-center justify-between
+                    rounded-lg px-4 py-3
+                    text-sm font-medium
+                    transition-colors duration-200
+                    outline-none
+                    focus-visible:ring-2
+                    focus-visible:ring-gray-400
+                    focus-visible:ring-offset-2
+                    ${
+                      active
+                        ? "bg-black hover:bg-black focus:bg-black"
+                        : "bg-transparent hover:bg-gray-100 focus:bg-gray-100"
+                    }
+                  `}
                 >
-                  {item.name}
-                </span>
+                  <span
+                    style={{
+                      color:
+                        active
+                          ? "#ffffff"
+                          : "#374151",
+                    }}
+                    className={
+                      active
+                        ? "text-white"
+                        : "text-gray-700 group-hover:text-gray-900 group-focus:text-gray-900"
+                    }
+                  >
+                    {
+                      item.name
+                    }
+                  </span>
 
-                {isNotification &&
-                  unreadCount > 0 && (
-                    <span
-                      className={`
-                        ml-3 flex min-w-6
-                        items-center justify-center
-                        rounded-full
-                        px-2 py-0.5
-                        text-xs font-semibold
-                        ${
-                          active
-                            ? "bg-white text-black"
-                            : "bg-red-500 text-white"
-                        }
-                      `}
-                    >
-                      {unreadCount > 99
-                        ? "99+"
-                        : unreadCount}
-                    </span>
-                  )}
-              </Link>
-            );
-          })}
+                  {isNotification &&
+                    unreadCount >
+                      0 && (
+                      <span
+                        className={`
+                          ml-3 flex min-w-6
+                          items-center justify-center
+                          rounded-full
+                          px-2 py-0.5
+                          text-xs font-semibold
+                          ${
+                            active
+                              ? "bg-white text-black"
+                              : "bg-red-500 text-white"
+                          }
+                        `}
+                      >
+                        {unreadCount >
+                        99
+                          ? "99+"
+                          : unreadCount}
+                      </span>
+                    )}
+                </Link>
+              );
+            }
+          )}
         </nav>
+
+        {/* Demo Info */}
+        {isDemo && (
+          <div className="mx-4 mb-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
+            <p className="text-xs font-semibold text-amber-900">
+              Demo Mode
+            </p>
+
+            <p className="mt-1 text-[11px] leading-4 text-amber-700">
+              Sample data only. All modification actions are disabled.
+            </p>
+          </div>
+        )}
 
         {/* Logout */}
         <div className="shrink-0 border-t border-gray-200 p-4">
           <button
             type="button"
-            onClick={handleLogout}
+            onClick={
+              handleLogout
+            }
             className="
               w-full rounded-lg
               bg-red-50 px-4 py-3
