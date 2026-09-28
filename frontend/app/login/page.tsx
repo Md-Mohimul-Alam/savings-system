@@ -28,7 +28,7 @@ const DEMO_PHONE =
   "01000000000";
 
 const DEMO_PASSWORD =
-  "your_demo_password";
+  "12345678";
 
 export default function LoginPage() {
   const router =
