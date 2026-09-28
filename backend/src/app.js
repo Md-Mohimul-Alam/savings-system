@@ -39,7 +39,7 @@ const app = express();
 
 const allowedOrigins = [
   "http://localhost:3000",
-  "https://savings-system-coral.vercel.app/login"
+  "https://savings-system-tracker.vercel.app"
 ];
 
 if (process.env.FRONTEND_URL) {
