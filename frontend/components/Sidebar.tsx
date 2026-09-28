@@ -210,7 +210,7 @@ export default function Sidebar({
           type="button"
           aria-label="Close sidebar overlay"
           onClick={onClose}
-          className="fixed inset-0 z-40 bg-black/40 text-white lg:hidden"
+          className="fixed inset-0 z-40 bg-black/40 lg:hidden"
         />
       )}
 
@@ -245,7 +245,7 @@ export default function Sidebar({
             <button
               type="button"
               onClick={onClose}
-              className="shrink-0 text-2xl leading-none text-gray-500 transition hover:text-black lg:hidden"
+              className="shrink-0 text-2xl leading-none text-gray-500 transition hover:text-black focus:text-black lg:hidden"
               aria-label="Close sidebar"
             >
               ×
@@ -296,10 +296,10 @@ export default function Sidebar({
                   key={item.href}
                   href={item.href}
                   onClick={onClose}
-                  className={`flex items-center justify-between rounded-lg px-4 py-3 text-sm font-medium transition ${
+                  className={`flex items-center justify-between rounded-lg px-4 py-3 text-sm font-medium transition outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 ${
                     active
-                      ? "bg-black text-white"
-                      : "text-gray-700 hover:bg-gray-100"
+                      ? "bg-black text-white hover:bg-black hover:text-white focus:bg-black focus:text-white"
+                      : "text-gray-700 hover:bg-gray-100 hover:text-gray-900 focus:bg-gray-100 focus:text-gray-900"
                   }`}
                 >
                   <span>
@@ -330,7 +330,7 @@ export default function Sidebar({
           <button
             type="button"
             onClick={handleLogout}
-            className="w-full rounded-lg bg-red-50 px-4 py-3 text-sm font-medium text-red-600 transition hover:bg-red-100"
+            className="w-full rounded-lg bg-red-50 px-4 py-3 text-sm font-medium text-red-600 transition hover:bg-red-100 hover:text-red-700 focus:bg-red-100 focus:text-red-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-300 focus-visible:ring-offset-2"
           >
             Logout
           </button>
