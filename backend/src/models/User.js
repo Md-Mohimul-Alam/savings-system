@@ -42,6 +42,14 @@ const userSchema = new mongoose.Schema(
       select: false,
     },
 
+    adminCode: {
+      type: String,
+      unique: true,
+      sparse: true,
+      trim: true,
+      uppercase: true,
+    },
+
     role: {
       type: String,
       enum: [
