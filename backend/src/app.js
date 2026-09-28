@@ -2,6 +2,8 @@ const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
 
+const connectDB = require("./config/db");
+
 // Routes
 const authRoutes = require("./routes/authRoutes");
 const memberRoutes = require("./routes/memberRoutes");
@@ -23,7 +25,7 @@ const app = express();
 const allowedOrigins = [
   "http://localhost:3000",
   "http://127.0.0.1:3000",
-  "https://savings-system-tracker.vercel.app",
+  "https://savings-system-coral.vercel.app",
 ];
 
 if (process.env.FRONTEND_URL) {
@@ -38,7 +40,7 @@ if (process.env.FRONTEND_URL) {
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow Postman, curl, server-to-server requests
+      // Allow Postman, curl, server-to-server
       if (!origin) {
         return callback(null, true);
       }
@@ -98,6 +100,24 @@ app.get("/api/health", (req, res) => {
     success: true,
     message: "API is healthy",
   });
+});
+
+// Ensure MongoDB is connected before API routes
+app.use("/api", async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (error) {
+    console.error(
+      "Database connection middleware error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: "Database connection failed",
+    });
+  }
 });
 
 // API Routes

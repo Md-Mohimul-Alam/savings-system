@@ -1,14 +1,25 @@
 const mongoose = require("mongoose");
 
-const connectDB = async () => {
-  try {
-    if (mongoose.connection.readyState === 1) {
-      return mongoose.connection;
-    }
+let isConnected = false;
 
+const connectDB = async () => {
+  if (isConnected) {
+    return mongoose.connection;
+  }
+
+  if (!process.env.MONGO_URI) {
+    throw new Error("MONGO_URI is not defined");
+  }
+
+  try {
     const connection = await mongoose.connect(
-      process.env.MONGO_URI
+      process.env.MONGO_URI,
+      {
+        serverSelectionTimeoutMS: 10000,
+      }
     );
+
+    isConnected = true;
 
     console.log(
       `MongoDB connected: ${connection.connection.host}`
