@@ -1,10 +1,13 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
+
 import {
   useEffect,
   useState,
 } from "react";
+
 import {
   usePathname,
   useRouter,
@@ -231,16 +234,29 @@ export default function Sidebar({
         {/* Header */}
         <div className="shrink-0 border-b border-gray-200 p-5">
           <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0">
-              <h1 className="truncate text-xl font-bold text-gray-900">
-                Group Savings
-              </h1>
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+                <Image
+                  src="/savings-logo.png"
+                  alt="Group Savings Logo"
+                  width={44}
+                  height={44}
+                  priority
+                  className="h-full w-full object-cover"
+                />
+              </div>
 
-              <p className="mt-1 text-xs text-gray-500">
-                {user?.role === "admin"
-                  ? "Admin Portal"
-                  : "Member Portal"}
-              </p>
+              <div className="min-w-0">
+                <h1 className="truncate text-lg font-bold text-gray-900">
+                  Group Savings
+                </h1>
+
+                <p className="mt-0.5 text-xs text-gray-500">
+                  {user?.role === "admin"
+                    ? "Admin Portal"
+                    : "Member Portal"}
+                </p>
+              </div>
             </div>
 
             <button
@@ -254,8 +270,8 @@ export default function Sidebar({
           </div>
 
           {user && (
-            <div className="mt-4 rounded-lg bg-gray-50 p-3">
-              <p className="truncate text-sm font-medium text-gray-900">
+            <div className="mt-4 rounded-xl border border-gray-100 bg-gray-50 p-3">
+              <p className="truncate text-sm font-semibold text-gray-900">
                 {user.name}
               </p>
 
@@ -282,8 +298,7 @@ export default function Sidebar({
             const active =
               pathname === item.href ||
               (
-                item.href !==
-                  "/dashboard" &&
+                item.href !== "/dashboard" &&
                 pathname.startsWith(
                   `${item.href}/`
                 )
