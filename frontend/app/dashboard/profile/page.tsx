@@ -12,6 +12,10 @@ import {
   updateMyMemberProfile,
 } from "@/services/profileApi";
 
+import {
+  useDemoMode,
+} from "@/hooks/useDemoMode";
+
 interface MemberProfile {
   _id: string;
   memberCode: string;
@@ -44,6 +48,9 @@ interface EditableProfile {
 }
 
 export default function ProfilePage() {
+  const isDemo =
+    useDemoMode();
+
   const [
     member,
     setMember,
@@ -93,6 +100,10 @@ export default function ProfilePage() {
   ] =
     useState("");
 
+  // --------------------------------------------------
+  // LOAD PROFILE
+  // --------------------------------------------------
+
   useEffect(() => {
     const loadProfile =
       async () => {
@@ -137,61 +148,105 @@ export default function ProfilePage() {
               "Failed to load profile"
           );
         } finally {
-          setLoading(false);
+          setLoading(
+            false
+          );
         }
       };
 
     loadProfile();
   }, []);
 
-  const handleChange = (
-    event: ChangeEvent<HTMLInputElement>
-  ) => {
-    const {
-      name,
-      value,
-    } =
-      event.target;
+  // --------------------------------------------------
+  // FIELD CHANGE
+  // --------------------------------------------------
 
-    setForm(
-      (
-        previous
-      ) => ({
-        ...previous,
+  const handleChange =
+    (
+      event: ChangeEvent<HTMLInputElement>
+    ) => {
+      if (isDemo) {
+        return;
+      }
 
-        [name]:
-          value,
-      })
-    );
-  };
+      const {
+        name,
+        value,
+      } =
+        event.target;
 
-  const handleCancel = () => {
-    if (!member) {
-      return;
-    }
+      setForm(
+        (
+          previous
+        ) => ({
+          ...previous,
 
-    setForm({
-      phone:
-        member.phone ||
-        "",
+          [name]:
+            value,
+        })
+      );
+    };
 
-      address:
-        member.address ||
-        "",
+  // --------------------------------------------------
+  // CANCEL EDIT
+  // --------------------------------------------------
 
-      nidNumber:
-        member.nidNumber ||
-        "",
+  const handleCancel =
+    () => {
+      if (!member) {
+        return;
+      }
 
-      passportNumber:
-        member.passportNumber ||
-        "",
-    });
+      setForm({
+        phone:
+          member.phone ||
+          "",
 
-    setError("");
-    setSuccess("");
-    setEditing(false);
-  };
+        address:
+          member.address ||
+          "",
+
+        nidNumber:
+          member.nidNumber ||
+          "",
+
+        passportNumber:
+          member.passportNumber ||
+          "",
+      });
+
+      setError("");
+      setSuccess("");
+      setEditing(
+        false
+      );
+    };
+
+  // --------------------------------------------------
+  // START EDITING
+  // --------------------------------------------------
+
+  const handleStartEditing =
+    () => {
+      if (isDemo) {
+        setError(
+          "Demo Mode is read-only. Profile editing is disabled."
+        );
+
+        return;
+      }
+
+      setEditing(
+        true
+      );
+
+      setSuccess("");
+      setError("");
+    };
+
+  // --------------------------------------------------
+  // SAVE PROFILE
+  // --------------------------------------------------
 
   const handleSubmit =
     async (
@@ -199,8 +254,19 @@ export default function ProfilePage() {
     ) => {
       event.preventDefault();
 
+      if (isDemo) {
+        setError(
+          "Demo Mode is read-only. Updating profile information is disabled."
+        );
+
+        return;
+      }
+
       try {
-        setSaving(true);
+        setSaving(
+          true
+        );
+
         setError("");
         setSuccess("");
 
@@ -257,7 +323,9 @@ export default function ProfilePage() {
             "Profile updated successfully"
         );
 
-        setEditing(false);
+        setEditing(
+          false
+        );
       } catch (
         error: any
       ) {
@@ -268,9 +336,15 @@ export default function ProfilePage() {
             "Failed to update profile"
         );
       } finally {
-        setSaving(false);
+        setSaving(
+          false
+        );
       }
     };
+
+  // --------------------------------------------------
+  // LOADING
+  // --------------------------------------------------
 
   if (loading) {
     return (
@@ -298,6 +372,10 @@ export default function ProfilePage() {
     );
   }
 
+  // --------------------------------------------------
+  // ERROR
+  // --------------------------------------------------
+
   if (
     error &&
     !member
@@ -313,14 +391,27 @@ export default function ProfilePage() {
     return null;
   }
 
+  // --------------------------------------------------
+  // UI
+  // --------------------------------------------------
+
   return (
     <div className="space-y-8">
+
       {/* Header */}
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-gray-950">
-            My Profile
-          </h1>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-3xl font-bold tracking-tight text-gray-950">
+              My Profile
+            </h1>
+
+            {isDemo && (
+              <span className="rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
+                Demo Mode · Read Only
+              </span>
+            )}
+          </div>
 
           <p className="mt-2 text-sm text-gray-500">
             Manage your personal and membership information.
@@ -330,39 +421,59 @@ export default function ProfilePage() {
         {!editing && (
           <button
             type="button"
-            onClick={() => {
-              setEditing(
-                true
-              );
-
-              setSuccess(
-                ""
-              );
-
-              setError(
-                ""
-              );
-            }}
-            className="w-full rounded-xl bg-gray-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-gray-800 sm:w-auto"
+            onClick={
+              handleStartEditing
+            }
+            disabled={
+              isDemo
+            }
+            title={
+              isDemo
+                ? "Disabled in Demo Mode"
+                : undefined
+            }
+            className={`w-full rounded-xl px-5 py-3 text-sm font-semibold text-white transition sm:w-auto ${
+              isDemo
+                ? "cursor-not-allowed bg-gray-400"
+                : "bg-gray-900 hover:bg-gray-800"
+            } disabled:opacity-60`}
           >
-            Edit Profile
+            {isDemo
+              ? "Editing Disabled"
+              : "Edit Profile"}
           </button>
         )}
       </div>
 
+      {/* Demo Notice */}
+      {isDemo && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <p className="text-sm font-semibold text-amber-900">
+            Demo Mode
+          </p>
+
+          <p className="mt-1 text-sm text-amber-700">
+            You can view this sample profile, but personal information
+            cannot be edited or updated.
+          </p>
+        </div>
+      )}
+
+      {/* Error */}
       {error && (
         <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-600">
           {error}
         </div>
       )}
 
+      {/* Success */}
       {success && (
         <div className="rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-700">
           {success}
         </div>
       )}
 
-      {/* Profile summary */}
+      {/* Profile Summary */}
       <section>
         <div className="mb-4">
           <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
@@ -439,23 +550,42 @@ export default function ProfilePage() {
                 : "-"
             }
           />
+
+          <InfoCard
+            title="Account Status"
+            value={
+              member.user
+                .status ||
+              "-"
+            }
+          />
         </div>
       </section>
 
-      {/* Editable personal information */}
+      {/* Personal Information */}
       <section className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
         <div className="border-b border-gray-100 px-5 py-5 sm:px-6">
-          <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
-            Personal Information
-          </p>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+                Personal Information
+              </p>
 
-          <h2 className="mt-1 text-xl font-bold text-gray-900">
-            Contact & Identification
-          </h2>
+              <h2 className="mt-1 text-xl font-bold text-gray-900">
+                Contact & Identification
+              </h2>
 
-          <p className="mt-1 text-sm text-gray-500">
-            Update your phone, address, NID and passport information.
-          </p>
+              <p className="mt-1 text-sm text-gray-500">
+                Update your phone, address, NID and passport information.
+              </p>
+            </div>
+
+            {isDemo && (
+              <span className="w-fit rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600">
+                Read Only
+              </span>
+            )}
+          </div>
         </div>
 
         {editing ? (
@@ -477,6 +607,10 @@ export default function ProfilePage() {
                 onChange={
                   handleChange
                 }
+                disabled={
+                  isDemo ||
+                  saving
+                }
               />
 
               <EditableField
@@ -490,6 +624,10 @@ export default function ProfilePage() {
                 onChange={
                   handleChange
                 }
+                disabled={
+                  isDemo ||
+                  saving
+                }
               />
 
               <EditableField
@@ -501,6 +639,10 @@ export default function ProfilePage() {
                 placeholder="Enter NID number"
                 onChange={
                   handleChange
+                }
+                disabled={
+                  isDemo ||
+                  saving
                 }
               />
 
@@ -514,6 +656,10 @@ export default function ProfilePage() {
                 uppercase
                 onChange={
                   handleChange
+                }
+                disabled={
+                  isDemo ||
+                  saving
                 }
               />
             </div>
@@ -535,11 +681,23 @@ export default function ProfilePage() {
               <button
                 type="submit"
                 disabled={
-                  saving
+                  saving ||
+                  isDemo
                 }
-                className="rounded-xl bg-emerald-700 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
+                title={
+                  isDemo
+                    ? "Disabled in Demo Mode"
+                    : undefined
+                }
+                className={`rounded-xl px-5 py-3 text-sm font-semibold text-white transition ${
+                  isDemo
+                    ? "cursor-not-allowed bg-gray-400"
+                    : "bg-emerald-700 hover:bg-emerald-800"
+                } disabled:opacity-60`}
               >
-                {saving
+                {isDemo
+                  ? "Save Disabled"
+                  : saving
                   ? "Saving..."
                   : "Save Changes"}
               </button>
@@ -585,6 +743,10 @@ export default function ProfilePage() {
   );
 }
 
+// --------------------------------------------------
+// INFO CARD
+// --------------------------------------------------
+
 function InfoCard({
   title,
   value,
@@ -604,6 +766,10 @@ function InfoCard({
     </div>
   );
 }
+
+// --------------------------------------------------
+// PROFILE FIELD
+// --------------------------------------------------
 
 function ProfileField({
   title,
@@ -625,6 +791,10 @@ function ProfileField({
   );
 }
 
+// --------------------------------------------------
+// EDITABLE FIELD
+// --------------------------------------------------
+
 function EditableField({
   label,
   name,
@@ -633,6 +803,7 @@ function EditableField({
   autoComplete,
   uppercase = false,
   onChange,
+  disabled = false,
 }: {
   label: string;
   name: keyof EditableProfile;
@@ -643,6 +814,7 @@ function EditableField({
   onChange: (
     event: ChangeEvent<HTMLInputElement>
   ) => void;
+  disabled?: boolean;
 }) {
   return (
     <div>
@@ -675,7 +847,14 @@ function EditableField({
         autoComplete={
           autoComplete
         }
-        className={`w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 ${
+        disabled={
+          disabled
+        }
+        className={`w-full rounded-xl border border-gray-300 px-4 py-3 text-gray-900 outline-none transition placeholder:text-gray-400 ${
+          disabled
+            ? "cursor-not-allowed bg-gray-100 text-gray-500"
+            : "bg-white focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
+        } ${
           uppercase
             ? "uppercase"
             : ""

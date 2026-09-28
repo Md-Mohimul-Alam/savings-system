@@ -1,7 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import {
+  useEffect,
+  useState,
+} from "react";
+
+import {
+  useRouter,
+} from "next/navigation";
 
 import {
   getMyNotifications,
@@ -9,10 +15,15 @@ import {
   markNotificationAsRead,
 } from "@/services/notificationApi";
 
+import {
+  useDemoMode,
+} from "@/hooks/useDemoMode";
+
 interface Notification {
   _id: string;
   title: string;
   message: string;
+
   type:
     | "INFO"
     | "CONTRIBUTION"
@@ -21,123 +32,221 @@ interface Notification {
     | "EXIT_REQUEST"
     | "PROFIT"
     | "SYSTEM";
+
   isRead: boolean;
   link?: string;
   createdAt: string;
 }
 
 export default function NotificationsPage() {
-  const router = useRouter();
+  const router =
+    useRouter();
 
-  const [notifications, setNotifications] =
-    useState<Notification[]>([]);
+  const isDemo =
+    useDemoMode();
 
-  const [unreadCount, setUnreadCount] =
+  const [
+    notifications,
+    setNotifications,
+  ] =
+    useState<
+      Notification[]
+    >([]);
+
+  const [
+    unreadCount,
+    setUnreadCount,
+  ] =
     useState(0);
 
-  const [loading, setLoading] =
+  const [
+    loading,
+    setLoading,
+  ] =
     useState(true);
 
-  const [error, setError] =
+  const [
+    error,
+    setError,
+  ] =
     useState("");
 
-  const [markingAll, setMarkingAll] =
+  const [
+    markingAll,
+    setMarkingAll,
+  ] =
     useState(false);
 
-  const loadNotifications = async () => {
-    try {
-      setError("");
+  // --------------------------------------------------
+  // LOAD NOTIFICATIONS
+  // --------------------------------------------------
 
-      const data =
-        await getMyNotifications();
+  const loadNotifications =
+    async () => {
+      try {
+        setError("");
 
-      setNotifications(
-        data.notifications || []
-      );
+        const data =
+          await getMyNotifications();
 
-      setUnreadCount(
-        data.unreadCount || 0
-      );
-    } catch (error: any) {
-      setError(
-        error?.response?.data?.message ||
-          "Failed to load notifications"
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
+        setNotifications(
+          data.notifications ||
+            []
+        );
+
+        setUnreadCount(
+          data.unreadCount ||
+            0
+        );
+      } catch (
+        error: any
+      ) {
+        setError(
+          error?.response
+            ?.data
+            ?.message ||
+            "Failed to load notifications"
+        );
+      } finally {
+        setLoading(
+          false
+        );
+      }
+    };
 
   useEffect(() => {
     loadNotifications();
   }, []);
 
-  const handleNotificationClick = async (
-    notification: Notification
-  ) => {
-    try {
-      if (!notification.isRead) {
-        await markNotificationAsRead(
-          notification._id
-        );
+  // --------------------------------------------------
+  // NOTIFICATION CLICK
+  // --------------------------------------------------
 
-        setNotifications(
-          (current) =>
-            current.map((item) =>
-              item._id ===
-              notification._id
-                ? {
-                    ...item,
-                    isRead: true,
-                  }
-                : item
-            )
-        );
+  const handleNotificationClick =
+    async (
+      notification: Notification
+    ) => {
+      try {
+        // Demo mode:
+        // never modify notification state in backend.
+        if (
+          !isDemo &&
+          !notification.isRead
+        ) {
+          await markNotificationAsRead(
+            notification._id
+          );
 
-        setUnreadCount((count) =>
-          Math.max(count - 1, 0)
-        );
-      }
+          setNotifications(
+            (
+              current
+            ) =>
+              current.map(
+                (
+                  item
+                ) =>
+                  item._id ===
+                  notification._id
+                    ? {
+                        ...item,
+                        isRead:
+                          true,
+                      }
+                    : item
+              )
+          );
 
-      if (notification.link) {
-        router.push(
+          setUnreadCount(
+            (
+              count
+            ) =>
+              Math.max(
+                count -
+                  1,
+                0
+              )
+          );
+        }
+
+        // Demo users are still allowed
+        // to navigate to the notification target.
+        if (
           notification.link
+        ) {
+          router.push(
+            notification.link
+          );
+        }
+      } catch (
+        error
+      ) {
+        console.error(
+          "Failed to update notification:",
+          error
         );
       }
-    } catch (error) {
-      console.error(
-        "Failed to update notification:",
-        error
-      );
-    }
-  };
+    };
+
+  // --------------------------------------------------
+  // MARK ALL AS READ
+  // --------------------------------------------------
 
   const handleMarkAllAsRead =
     async () => {
+      if (isDemo) {
+        setError(
+          "Demo Mode is read-only. Updating notification status is disabled."
+        );
+
+        return;
+      }
+
       try {
-        setMarkingAll(true);
+        setMarkingAll(
+          true
+        );
+
+        setError("");
 
         await markAllNotificationsAsRead();
 
         setNotifications(
-          (current) =>
-            current.map((item) => ({
-              ...item,
-              isRead: true,
-            }))
+          (
+            current
+          ) =>
+            current.map(
+              (
+                item
+              ) => ({
+                ...item,
+                isRead:
+                  true,
+              })
+            )
         );
 
-        setUnreadCount(0);
-      } catch (error: any) {
+        setUnreadCount(
+          0
+        );
+      } catch (
+        error: any
+      ) {
         setError(
-          error?.response?.data
+          error?.response
+            ?.data
             ?.message ||
             "Failed to mark notifications as read"
         );
       } finally {
-        setMarkingAll(false);
+        setMarkingAll(
+          false
+        );
       }
     };
+
+  // --------------------------------------------------
+  // LOADING
+  // --------------------------------------------------
 
   if (loading) {
     return (
@@ -147,66 +256,121 @@ export default function NotificationsPage() {
     );
   }
 
+  // --------------------------------------------------
+  // UI
+  // --------------------------------------------------
+
   return (
     <div className="max-w-5xl">
+      {/* Header */}
       <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">
-            Notifications
-          </h1>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-3xl font-bold text-gray-900">
+              Notifications
+            </h1>
+
+            {isDemo && (
+              <span className="rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
+                Demo Mode · Read Only
+              </span>
+            )}
+          </div>
 
           <p className="mt-2 text-gray-500">
             You have{" "}
             <strong>
-              {unreadCount}
+              {
+                unreadCount
+              }
             </strong>{" "}
             unread notification
-            {unreadCount === 1
+            {unreadCount ===
+            1
               ? ""
-              : "s"}.
+              : "s"}
+            .
           </p>
         </div>
 
-        {unreadCount > 0 && (
+        {unreadCount >
+          0 && (
           <button
+            type="button"
             onClick={
               handleMarkAllAsRead
             }
-            disabled={markingAll}
-            className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={
+              markingAll ||
+              isDemo
+            }
+            title={
+              isDemo
+                ? "Disabled in Demo Mode"
+                : undefined
+            }
+            className={`rounded-lg border px-4 py-2 text-sm font-medium transition ${
+              isDemo
+                ? "cursor-not-allowed border-gray-200 bg-gray-100 text-gray-400"
+                : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+            } disabled:opacity-50`}
           >
-            {markingAll
+            {isDemo
+              ? "Mark All Disabled"
+              : markingAll
               ? "Updating..."
               : "Mark all as read"}
           </button>
         )}
       </div>
 
-      {error && (
-        <div className="mb-5 rounded-lg bg-red-50 p-4 text-red-600">
-          {error}
+      {/* Demo Notice */}
+      {isDemo && (
+        <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <p className="text-sm font-semibold text-amber-900">
+            Demo Mode
+          </p>
+
+          <p className="mt-1 text-sm text-amber-700">
+            You can view sample notifications and open linked pages,
+            but notification read status cannot be changed.
+          </p>
         </div>
       )}
 
-      {notifications.length === 0 ? (
+      {/* Error */}
+      {error && (
+        <div className="mb-5 rounded-lg bg-red-50 p-4 text-red-600">
+          {
+            error
+          }
+        </div>
+      )}
+
+      {/* Empty */}
+      {notifications.length ===
+      0 ? (
         <div className="rounded-xl border border-gray-200 bg-white p-10 text-center">
           <h2 className="text-lg font-semibold text-gray-900">
             No notifications yet
           </h2>
 
           <p className="mt-2 text-sm text-gray-500">
-            Important updates will
-            appear here.
+            Important updates will appear here.
           </p>
         </div>
       ) : (
+        /* Notification List */
         <div className="space-y-3">
           {notifications.map(
-            (notification) => (
+            (
+              notification
+            ) => (
               <button
                 key={
                   notification._id
                 }
+                type="button"
                 onClick={() =>
                   handleNotificationClick(
                     notification
@@ -244,6 +408,12 @@ export default function NotificationsPage() {
                           New
                         </span>
                       )}
+
+                      {isDemo && (
+                        <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-700">
+                          Sample
+                        </span>
+                      )}
                     </div>
 
                     <p className="mt-2 text-sm leading-6 text-gray-600">
@@ -265,6 +435,13 @@ export default function NotificationsPage() {
                     Click to view details →
                   </p>
                 )}
+
+                {isDemo &&
+                  !notification.isRead && (
+                    <p className="mt-2 text-xs text-amber-600">
+                      Read status will not change in Demo Mode.
+                    </p>
+                  )}
               </button>
             )
           )}
@@ -273,6 +450,10 @@ export default function NotificationsPage() {
     </div>
   );
 }
+
+// --------------------------------------------------
+// TYPE BADGE
+// --------------------------------------------------
 
 function TypeBadge({
   type,
@@ -285,49 +466,80 @@ function TypeBadge({
   > = {
     INFO:
       "bg-gray-100 text-gray-700",
+
     CONTRIBUTION:
       "bg-green-50 text-green-700",
+
     INVESTMENT:
       "bg-blue-50 text-blue-700",
+
     JOIN_REQUEST:
       "bg-purple-50 text-purple-700",
+
     EXIT_REQUEST:
       "bg-orange-50 text-orange-700",
+
     PROFIT:
       "bg-emerald-50 text-emerald-700",
+
     SYSTEM:
       "bg-red-50 text-red-700",
   };
 
   return (
     <span
-      className={`rounded-full px-2.5 py-1 text-xs font-medium ${styles[type]}`}
+      className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+        styles[
+          type
+        ]
+      }`}
     >
       {type
-        .replaceAll("_", " ")
+        .replaceAll(
+          "_",
+          " "
+        )
         .toLowerCase()
-        .replace(/\b\w/g, (char) =>
-          char.toUpperCase()
+        .replace(
+          /\b\w/g,
+          (
+            char
+          ) =>
+            char.toUpperCase()
         )}
     </span>
   );
 }
 
+// --------------------------------------------------
+// FORMAT DATE
+// --------------------------------------------------
+
 function formatDate(
   dateString: string
 ) {
-  const date = new Date(
-    dateString
-  );
+  const date =
+    new Date(
+      dateString
+    );
 
   return date.toLocaleString(
     "en-BD",
     {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
+      day:
+        "2-digit",
+
+      month:
+        "short",
+
+      year:
+        "numeric",
+
+      hour:
+        "2-digit",
+
+      minute:
+        "2-digit",
     }
   );
 }

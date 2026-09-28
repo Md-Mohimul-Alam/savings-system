@@ -11,9 +11,15 @@ import {
   getMyExitRequest,
 } from "@/services/myExitRequestApi";
 
+import {
+  useDemoMode,
+} from "@/hooks/useDemoMode";
+
 interface ExitRequest {
   _id: string;
+
   reason?: string;
+
   status:
     | "pending"
     | "approved"
@@ -29,94 +35,166 @@ interface ExitRequest {
 }
 
 export default function MyExitRequestPage() {
-  const [request, setRequest] =
-    useState<ExitRequest | null>(null);
+  const isDemo =
+    useDemoMode();
 
-  const [reason, setReason] =
+  const [
+    request,
+    setRequest,
+  ] =
+    useState<
+      ExitRequest | null
+    >(null);
+
+  const [
+    reason,
+    setReason,
+  ] =
     useState("");
 
-  const [loading, setLoading] =
+  const [
+    loading,
+    setLoading,
+  ] =
     useState(true);
 
-  const [submitting, setSubmitting] =
+  const [
+    submitting,
+    setSubmitting,
+  ] =
     useState(false);
 
-  const [error, setError] =
+  const [
+    error,
+    setError,
+  ] =
     useState("");
 
-  const [message, setMessage] =
+  const [
+    message,
+    setMessage,
+  ] =
     useState("");
 
-  const loadRequest = async () => {
-    try {
-      setLoading(true);
-      setError("");
+  // --------------------------------------------------
+  // LOAD REQUEST
+  // --------------------------------------------------
 
-      const data =
-        await getMyExitRequest();
+  const loadRequest =
+    async () => {
+      try {
+        setLoading(
+          true
+        );
 
-      setRequest(
-        data.exitRequest ||
-          data.request ||
-          null
-      );
-    } catch (error: any) {
-      if (
-        error?.response?.status === 404
+        setError("");
+
+        const data =
+          await getMyExitRequest();
+
+        setRequest(
+          data.exitRequest ||
+            data.request ||
+            null
+        );
+      } catch (
+        error: any
       ) {
-        setRequest(null);
-      } else {
-        setError(
-          error?.response?.data?.message ||
-            "Failed to load exit request"
+        if (
+          error?.response
+            ?.status ===
+          404
+        ) {
+          setRequest(
+            null
+          );
+        } else {
+          setError(
+            error?.response
+              ?.data
+              ?.message ||
+              "Failed to load exit request"
+          );
+        }
+      } finally {
+        setLoading(
+          false
         );
       }
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
 
   useEffect(() => {
     loadRequest();
   }, []);
 
-  const handleSubmit = async (
-    event: FormEvent
-  ) => {
-    event.preventDefault();
+  // --------------------------------------------------
+  // SUBMIT EXIT REQUEST
+  // --------------------------------------------------
 
-    if (!reason.trim()) {
-      setError(
-        "Please provide a reason for your exit request."
-      );
-      return;
-    }
+  const handleSubmit =
+    async (
+      event: FormEvent<HTMLFormElement>
+    ) => {
+      event.preventDefault();
 
-    try {
-      setSubmitting(true);
       setError("");
       setMessage("");
 
-      await createMyExitRequest(
-        reason.trim()
-      );
+      if (isDemo) {
+        setError(
+          "Demo Mode is read-only. Submitting an exit request is disabled."
+        );
 
-      setReason("");
+        return;
+      }
 
-      setMessage(
-        "Exit request submitted successfully."
-      );
+      if (
+        !reason.trim()
+      ) {
+        setError(
+          "Please provide a reason for your exit request."
+        );
 
-      await loadRequest();
-    } catch (error: any) {
-      setError(
-        error?.response?.data?.message ||
-          "Failed to submit exit request"
-      );
-    } finally {
-      setSubmitting(false);
-    }
-  };
+        return;
+      }
+
+      try {
+        setSubmitting(
+          true
+        );
+
+        await createMyExitRequest(
+          reason.trim()
+        );
+
+        setReason(
+          ""
+        );
+
+        setMessage(
+          "Exit request submitted successfully."
+        );
+
+        await loadRequest();
+      } catch (
+        error: any
+      ) {
+        setError(
+          error?.response
+            ?.data
+            ?.message ||
+            "Failed to submit exit request"
+        );
+      } finally {
+        setSubmitting(
+          false
+        );
+      }
+    };
+
+  // --------------------------------------------------
+  // LOADING
+  // --------------------------------------------------
 
   if (loading) {
     return (
@@ -126,33 +204,67 @@ export default function MyExitRequestPage() {
     );
   }
 
+  // --------------------------------------------------
+  // UI
+  // --------------------------------------------------
+
   return (
     <div className="max-w-4xl">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">
-          My Exit Request
-        </h1>
 
-        <p className="mt-2 text-gray-500">
-          Request to leave the group and review your
-          estimated final payout.
-        </p>
+      {/* Header */}
+      <div className="mb-8">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">
+              My Exit Request
+            </h1>
+
+            <p className="mt-2 text-gray-500">
+              Request to leave the group and review your
+              estimated final payout.
+            </p>
+          </div>
+
+          {isDemo && (
+            <span className="w-fit rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
+              Demo Mode · Read Only
+            </span>
+          )}
+        </div>
       </div>
 
+      {/* Demo Notice */}
+      {isDemo && (
+        <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <p className="text-sm font-semibold text-amber-900">
+            Demo Mode
+          </p>
+
+          <p className="mt-1 text-sm text-amber-700">
+            You can review sample exit-request information,
+            but submitting a new exit request is disabled.
+          </p>
+        </div>
+      )}
+
+      {/* Error */}
       {error && (
         <div className="mb-5 rounded-lg bg-red-50 p-4 text-red-600">
           {error}
         </div>
       )}
 
+      {/* Success */}
       {message && (
         <div className="mb-5 rounded-lg bg-green-50 p-4 text-green-700">
           {message}
         </div>
       )}
 
+      {/* Existing Request */}
       {request ? (
         <div className="rounded-xl border border-gray-200 bg-white p-6">
+
           <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
             <div>
               <p className="text-sm text-gray-500">
@@ -160,12 +272,16 @@ export default function MyExitRequestPage() {
               </p>
 
               <p className="mt-1 text-xl font-bold capitalize">
-                {request.status}
+                {
+                  request.status
+                }
               </p>
             </div>
 
             <StatusBadge
-              status={request.status}
+              status={
+                request.status
+              }
             />
           </div>
 
@@ -173,14 +289,16 @@ export default function MyExitRequestPage() {
             <InfoCard
               title="Estimated Payout"
               value={`৳${Number(
-                request.estimatedPayout || 0
+                request.estimatedPayout ||
+                  0
               ).toLocaleString()}`}
             />
 
             <InfoCard
               title="Final Payout"
               value={
-                request.finalPayout != null
+                request.finalPayout !=
+                null
                   ? `৳${Number(
                       request.finalPayout
                     ).toLocaleString()}`
@@ -195,7 +313,8 @@ export default function MyExitRequestPage() {
             </p>
 
             <p className="mt-1 text-gray-900">
-              {request.reason || "-"}
+              {request.reason ||
+                "-"}
             </p>
           </div>
 
@@ -206,7 +325,9 @@ export default function MyExitRequestPage() {
               </p>
 
               <p className="mt-2 text-sm text-gray-600">
-                {request.adminNote}
+                {
+                  request.adminNote
+                }
               </p>
             </div>
           )}
@@ -218,6 +339,15 @@ export default function MyExitRequestPage() {
             ).toLocaleString()}
           </div>
 
+          {request.reviewedAt && (
+            <div className="mt-2 text-sm text-gray-500">
+              Reviewed:{" "}
+              {new Date(
+                request.reviewedAt
+              ).toLocaleString()}
+            </div>
+          )}
+
           {request.paidAt && (
             <div className="mt-2 text-sm text-gray-500">
               Paid:{" "}
@@ -228,18 +358,36 @@ export default function MyExitRequestPage() {
           )}
         </div>
       ) : (
-        <form
-          onSubmit={handleSubmit}
-          className="rounded-xl border border-gray-200 bg-white p-6"
-        >
-          <h2 className="text-xl font-semibold text-gray-900">
-            Submit Exit Request
-          </h2>
 
-          <p className="mt-2 text-sm text-gray-500">
-            The system will calculate an estimated payout
-            using your current ownership share.
-          </p>
+        /* New Exit Request */
+        <form
+          onSubmit={
+            handleSubmit
+          }
+          className={`rounded-xl border bg-white p-6 ${
+            isDemo
+              ? "border-amber-200"
+              : "border-gray-200"
+          }`}
+        >
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900">
+                Submit Exit Request
+              </h2>
+
+              <p className="mt-2 text-sm text-gray-500">
+                The system will calculate an estimated payout
+                using your current ownership share.
+              </p>
+            </div>
+
+            {isDemo && (
+              <span className="w-fit rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600">
+                Disabled in Demo Mode
+              </span>
+            )}
+          </div>
 
           <div className="mt-6">
             <label className="mb-2 block text-sm font-medium text-gray-700">
@@ -247,24 +395,53 @@ export default function MyExitRequestPage() {
             </label>
 
             <textarea
-              value={reason}
-              onChange={(event) =>
+              value={
+                reason
+              }
+              onChange={(
+                event
+              ) =>
                 setReason(
-                  event.target.value
+                  event.target
+                    .value
                 )
               }
-              rows={5}
+              rows={
+                5
+              }
+              disabled={
+                isDemo ||
+                submitting
+              }
               placeholder="Why do you want to leave the group?"
-              className="w-full rounded-lg border border-gray-300 px-4 py-3 outline-none focus:border-black"
+              className={`w-full rounded-lg border border-gray-300 px-4 py-3 outline-none ${
+                isDemo
+                  ? "cursor-not-allowed bg-gray-100 text-gray-500"
+                  : "bg-white focus:border-black"
+              }`}
             />
           </div>
 
           <button
             type="submit"
-            disabled={submitting}
-            className="mt-5 rounded-lg bg-black px-5 py-3 font-medium text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={
+              submitting ||
+              isDemo
+            }
+            title={
+              isDemo
+                ? "Disabled in Demo Mode"
+                : undefined
+            }
+            className={`mt-5 rounded-lg px-5 py-3 font-medium text-white transition ${
+              isDemo
+                ? "cursor-not-allowed bg-gray-400"
+                : "bg-black hover:bg-gray-800"
+            } disabled:opacity-50`}
           >
-            {submitting
+            {isDemo
+              ? "Submission Disabled"
+              : submitting
               ? "Submitting..."
               : "Submit Exit Request"}
           </button>
@@ -273,6 +450,10 @@ export default function MyExitRequestPage() {
     </div>
   );
 }
+
+// --------------------------------------------------
+// INFO CARD
+// --------------------------------------------------
 
 function InfoCard({
   title,
@@ -294,6 +475,10 @@ function InfoCard({
   );
 }
 
+// --------------------------------------------------
+// STATUS BADGE
+// --------------------------------------------------
+
 function StatusBadge({
   status,
 }: {
@@ -305,10 +490,13 @@ function StatusBadge({
   > = {
     pending:
       "bg-yellow-50 text-yellow-700",
+
     approved:
       "bg-blue-50 text-blue-700",
+
     rejected:
       "bg-red-50 text-red-700",
+
     paid:
       "bg-green-50 text-green-700",
   };
@@ -316,7 +504,9 @@ function StatusBadge({
   return (
     <span
       className={`rounded-full px-3 py-1 text-sm font-medium capitalize ${
-        styles[status] ||
+        styles[
+          status
+        ] ||
         "bg-gray-100 text-gray-700"
       }`}
     >

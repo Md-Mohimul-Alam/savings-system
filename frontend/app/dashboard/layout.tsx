@@ -1,4 +1,6 @@
-import { ReactNode } from "react";
+import {
+  ReactNode,
+} from "react";
 
 import ProtectedRoute from "@/components/ProtectedRoute";
 import DashboardAccessGuard from "@/components/DashboardAccessGuard";

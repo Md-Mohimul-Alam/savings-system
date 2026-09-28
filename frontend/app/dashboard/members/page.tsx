@@ -12,6 +12,10 @@ import {
   deleteMember,
 } from "@/services/memberApi";
 
+import {
+  useDemoMode,
+} from "@/hooks/useDemoMode";
+
 interface PendingUser {
   _id: string;
   name: string;
@@ -38,17 +42,24 @@ interface Member {
 }
 
 export default function MembersPage() {
+  const isDemo =
+    useDemoMode();
+
   const [
     members,
     setMembers,
   ] =
-    useState<Member[]>([]);
+    useState<Member[]>(
+      []
+    );
 
   const [
     pendingUsers,
     setPendingUsers,
   ] =
-    useState<PendingUser[]>([]);
+    useState<
+      PendingUser[]
+    >([]);
 
   const [
     loading,
@@ -66,14 +77,33 @@ export default function MembersPage() {
     deletingId,
     setDeletingId,
   ] =
-    useState<string | null>(
+    useState<
+      string | null
+    >(
       null
     );
+
+  const [
+    approvingId,
+    setApprovingId,
+  ] =
+    useState<
+      string | null
+    >(
+      null
+    );
+
+  // --------------------------------------------------
+  // LOAD DATA
+  // --------------------------------------------------
 
   const loadData =
     async () => {
       try {
-        setLoading(true);
+        setLoading(
+          true
+        );
+
         setError("");
 
         const [
@@ -104,7 +134,9 @@ export default function MembersPage() {
             "Failed to load members"
         );
       } finally {
-        setLoading(false);
+        setLoading(
+          false
+        );
       }
     };
 
@@ -112,11 +144,29 @@ export default function MembersPage() {
     loadData();
   }, []);
 
+  // --------------------------------------------------
+  // APPROVE USER
+  // --------------------------------------------------
+
   const handleApprove =
     async (
       userId: string
     ) => {
+      if (isDemo) {
+        setError(
+          "Demo Mode is read-only. Approving users is disabled."
+        );
+
+        return;
+      }
+
       try {
+        setError("");
+
+        setApprovingId(
+          userId
+        );
+
         await approveUser(
           userId,
           {}
@@ -126,20 +176,36 @@ export default function MembersPage() {
       } catch (
         error: any
       ) {
-        alert(
+        setError(
           error?.response
             ?.data
             ?.message ||
             "Failed to approve user"
         );
+      } finally {
+        setApprovingId(
+          null
+        );
       }
     };
+
+  // --------------------------------------------------
+  // DELETE MEMBER
+  // --------------------------------------------------
 
   const handleDelete =
     async (
       memberId: string,
       memberName: string
     ) => {
+      if (isDemo) {
+        setError(
+          "Demo Mode is read-only. Deleting members is disabled."
+        );
+
+        return;
+      }
+
       const confirmed =
         window.confirm(
           `Are you sure you want to delete ${
@@ -153,6 +219,8 @@ export default function MembersPage() {
       }
 
       try {
+        setError("");
+
         setDeletingId(
           memberId
         );
@@ -165,7 +233,7 @@ export default function MembersPage() {
       } catch (
         error: any
       ) {
-        alert(
+        setError(
           error?.response
             ?.data
             ?.message ||
@@ -178,6 +246,28 @@ export default function MembersPage() {
       }
     };
 
+  // --------------------------------------------------
+  // SUMMARY
+  // --------------------------------------------------
+
+  const totalSaved =
+    members.reduce(
+      (
+        sum,
+        member
+      ) =>
+        sum +
+        Number(
+          member.totalContribution ||
+            0
+        ),
+      0
+    );
+
+  // --------------------------------------------------
+  // LOADING
+  // --------------------------------------------------
+
   if (loading) {
     return (
       <p className="text-gray-500">
@@ -186,31 +276,105 @@ export default function MembersPage() {
     );
   }
 
+  // --------------------------------------------------
+  // UI
+  // --------------------------------------------------
+
   return (
     <div>
+      {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">
-          Members
-        </h1>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">
+              Members
+            </h1>
 
-        <p className="mt-2 text-gray-500">
-          Manage group
-          members and pending
-          registrations.
-        </p>
+            <p className="mt-2 text-gray-500">
+              Manage group members and pending registrations.
+            </p>
+          </div>
+
+          {isDemo && (
+            <span className="w-fit rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
+              Demo Mode · Read Only
+            </span>
+          )}
+        </div>
       </div>
 
+      {/* Demo Notice */}
+      {isDemo && (
+        <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <p className="text-sm font-semibold text-amber-900">
+            Demo Mode
+          </p>
+
+          <p className="mt-1 text-sm text-amber-700">
+            You can review all sample members and pending users,
+            but approval and deletion actions are disabled.
+          </p>
+        </div>
+      )}
+
+      {/* Error */}
       {error && (
         <div className="mb-6 rounded-lg bg-red-50 p-4 text-red-600">
           {error}
         </div>
       )}
 
+      {/* Summary */}
+      <div className="mb-8 grid gap-5 sm:grid-cols-3">
+        <div className="rounded-xl border border-gray-200 bg-white p-6">
+          <p className="text-sm text-gray-500">
+            Active Members
+          </p>
+
+          <h2 className="mt-2 text-2xl font-bold text-gray-900">
+            {
+              members.length
+            }
+          </h2>
+        </div>
+
+        <div className="rounded-xl border border-gray-200 bg-white p-6">
+          <p className="text-sm text-gray-500">
+            Pending Users
+          </p>
+
+          <h2 className="mt-2 text-2xl font-bold text-gray-900">
+            {
+              pendingUsers.length
+            }
+          </h2>
+        </div>
+
+        <div className="rounded-xl border border-gray-200 bg-white p-6">
+          <p className="text-sm text-gray-500">
+            Total Saved
+          </p>
+
+          <h2 className="mt-2 text-2xl font-bold text-gray-900">
+            ৳
+            {totalSaved.toLocaleString()}
+          </h2>
+        </div>
+      </div>
+
       {/* Pending Users */}
       <section className="mb-10">
-        <h2 className="mb-4 text-xl font-semibold text-gray-900">
-          Pending Users
-        </h2>
+        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <h2 className="text-xl font-semibold text-gray-900">
+            Pending Users
+          </h2>
+
+          {isDemo && (
+            <span className="text-xs font-medium text-amber-700">
+              Approval disabled
+            </span>
+          )}
+        </div>
 
         {pendingUsers.length ===
         0 ? (
@@ -242,7 +406,9 @@ export default function MembersPage() {
 
               <tbody>
                 {pendingUsers.map(
-                  (user) => (
+                  (
+                    user
+                  ) => (
                     <tr
                       key={
                         user._id
@@ -261,10 +427,12 @@ export default function MembersPage() {
                         }
                       </td>
 
-                      <td className="px-5 py-4 capitalize">
-                        {
-                          user.status
-                        }
+                      <td className="px-5 py-4">
+                        <span className="rounded-full bg-amber-50 px-3 py-1 text-sm capitalize text-amber-700">
+                          {
+                            user.status
+                          }
+                        </span>
                       </td>
 
                       <td className="px-5 py-4">
@@ -275,9 +443,28 @@ export default function MembersPage() {
                               user._id
                             )
                           }
-                          className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white transition hover:bg-gray-800"
+                          disabled={
+                            isDemo ||
+                            approvingId ===
+                              user._id
+                          }
+                          title={
+                            isDemo
+                              ? "Disabled in Demo Mode"
+                              : undefined
+                          }
+                          className={`rounded-lg px-4 py-2 text-sm font-medium text-white transition ${
+                            isDemo
+                              ? "cursor-not-allowed bg-gray-400"
+                              : "bg-black hover:bg-gray-800"
+                          } disabled:opacity-50`}
                         >
-                          Approve
+                          {isDemo
+                            ? "Read Only"
+                            : approvingId ===
+                              user._id
+                            ? "Approving..."
+                            : "Approve"}
                         </button>
                       </td>
                     </tr>
@@ -291,9 +478,17 @@ export default function MembersPage() {
 
       {/* Active Members */}
       <section>
-        <h2 className="mb-4 text-xl font-semibold text-gray-900">
-          Active Members
-        </h2>
+        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <h2 className="text-xl font-semibold text-gray-900">
+            Active Members
+          </h2>
+
+          {isDemo && (
+            <span className="text-xs font-medium text-amber-700">
+              Sample data
+            </span>
+          )}
+        </div>
 
         {members.length ===
         0 ? (
@@ -337,7 +532,9 @@ export default function MembersPage() {
 
               <tbody>
                 {members.map(
-                  (member) => (
+                  (
+                    member
+                  ) => (
                     <tr
                       key={
                         member._id
@@ -378,18 +575,21 @@ export default function MembersPage() {
                         ).toLocaleString()}
                       </td>
 
-                      <td className="px-5 py-4 capitalize">
-                        {
-                          member.membershipStatus
-                        }
+                      <td className="px-5 py-4">
+                        <span className="rounded-full bg-green-50 px-3 py-1 text-sm capitalize text-green-700">
+                          {
+                            member.membershipStatus
+                          }
+                        </span>
                       </td>
 
                       <td className="px-5 py-4">
                         <button
                           type="button"
                           disabled={
+                            isDemo ||
                             deletingId ===
-                            member._id
+                              member._id
                           }
                           onClick={() =>
                             handleDelete(
@@ -399,10 +599,21 @@ export default function MembersPage() {
                                 member.memberCode
                             )
                           }
-                          className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                          title={
+                            isDemo
+                              ? "Disabled in Demo Mode"
+                              : undefined
+                          }
+                          className={`rounded-lg px-4 py-2 text-sm font-medium text-white transition ${
+                            isDemo
+                              ? "cursor-not-allowed bg-gray-400"
+                              : "bg-red-600 hover:bg-red-700"
+                          } disabled:opacity-50`}
                         >
-                          {deletingId ===
-                          member._id
+                          {isDemo
+                            ? "Read Only"
+                            : deletingId ===
+                              member._id
                             ? "Deleting..."
                             : "Delete"}
                         </button>
