@@ -1,0 +1,230 @@
+const ProfitDistribution = require(
+  "../models/ProfitDistribution"
+);
+
+const Investment = require("../models/Investment");
+const Transaction = require("../models/Transaction");
+
+const calculateOwnership = require(
+  "../utils/calculateOwnership"
+);
+
+const distributeProfit = async (req, res) => {
+  try {
+    const {
+      investmentId,
+      totalProfit,
+      note,
+    } = req.body;
+
+    if (!investmentId || totalProfit === undefined) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "investmentId and totalProfit are required",
+      });
+    }
+
+    if (Number(totalProfit) <= 0) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Total profit must be greater than 0",
+      });
+    }
+
+    const investment = await Investment.findById(
+      investmentId
+    );
+
+    if (!investment) {
+      return res.status(404).json({
+        success: false,
+        message: "Investment not found",
+      });
+    }
+
+    const ownershipResult =
+      await calculateOwnership();
+
+    if (
+      !ownershipResult.ownershipData.length
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "No active members found for profit distribution",
+      });
+    }
+
+    const memberShares =
+      ownershipResult.ownershipData.map(
+        (member) => {
+          const share =
+            Number(totalProfit) *
+            (member.ownershipPercentage / 100);
+
+          return {
+            member: member.memberId,
+            ownershipPercentage:
+              member.ownershipPercentage,
+            profitShare: Number(
+              share.toFixed(2)
+            ),
+          };
+        }
+      );
+
+    const distribution =
+      await ProfitDistribution.create({
+        investment: investmentId,
+        totalProfit: Number(totalProfit),
+        members: memberShares,
+        note: note || "",
+        createdBy: req.user._id,
+      });
+
+    await Transaction.create({
+      type: "INVESTMENT_RETURN",
+      direction: "IN",
+      amount: Number(totalProfit),
+      referenceType: "ProfitDistribution",
+      referenceId: distribution._id,
+      description: `Profit received from ${investment.name}`,
+      createdBy: req.user._id,
+    });
+
+    const populatedDistribution =
+      await ProfitDistribution.findById(
+        distribution._id
+      )
+        .populate(
+          "investment",
+          "name investedAmount currentValue"
+        )
+        .populate({
+          path: "members.member",
+          populate: {
+            path: "user",
+            select: "name email",
+          },
+        })
+        .populate(
+          "createdBy",
+          "name email"
+        );
+
+    return res.status(201).json({
+      success: true,
+      message:
+        "Profit distributed successfully",
+      distribution:
+        populatedDistribution,
+    });
+  } catch (error) {
+    console.error(
+      "Profit distribution error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
+  }
+};
+
+const getAllProfitDistributions = async (
+  req,
+  res
+) => {
+  try {
+    const distributions =
+      await ProfitDistribution.find()
+        .populate(
+          "investment",
+          "name investedAmount currentValue"
+        )
+        .populate({
+          path: "members.member",
+          populate: {
+            path: "user",
+            select: "name email",
+          },
+        })
+        .populate(
+          "createdBy",
+          "name email"
+        )
+        .sort({
+          distributionDate: -1,
+        });
+
+    return res.status(200).json({
+      success: true,
+      count: distributions.length,
+      distributions,
+    });
+  } catch (error) {
+    console.error(
+      "Get profit distributions error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
+  }
+};
+
+const getProfitDistributionById = async (
+  req,
+  res
+) => {
+  try {
+    const distribution =
+      await ProfitDistribution.findById(
+        req.params.id
+      )
+        .populate(
+          "investment",
+          "name investedAmount currentValue"
+        )
+        .populate({
+          path: "members.member",
+          populate: {
+            path: "user",
+            select: "name email",
+          },
+        })
+        .populate(
+          "createdBy",
+          "name email"
+        );
+
+    if (!distribution) {
+      return res.status(404).json({
+        success: false,
+        message:
+          "Profit distribution not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      distribution,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
+  }
+};
+
+module.exports = {
+  distributeProfit,
+  getAllProfitDistributions,
+  getProfitDistributionById,
+};
