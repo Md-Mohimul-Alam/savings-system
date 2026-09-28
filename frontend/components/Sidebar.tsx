@@ -237,7 +237,7 @@ export default function Sidebar({
             <div className="flex min-w-0 items-center gap-3">
               <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
                 <Image
-                  src="/savings-logo.png"
+                  src="/logo.png"
                   alt="Group Savings Logo"
                   width={44}
                   height={44}
