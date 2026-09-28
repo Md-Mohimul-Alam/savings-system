@@ -64,6 +64,12 @@ router.get(
 
         status:
           req.user.status,
+
+        isDemo:
+          req.user.isDemo === true,
+
+        dataScope:
+          req.dataScope,
       },
     });
   }
@@ -96,6 +102,12 @@ router.get(
 
         email:
           req.user.email,
+
+        isDemo:
+          req.user.isDemo === true,
+
+        dataScope:
+          req.dataScope,
       },
     });
   }
