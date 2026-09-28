@@ -210,7 +210,7 @@ export default function Sidebar({
           type="button"
           aria-label="Close sidebar overlay"
           onClick={onClose}
-          className="fixed inset-0 z-40 bg-black/40 lg:hidden"
+          className="fixed inset-0 z-40 bg-black/40 text-white lg:hidden"
         />
       )}
 
