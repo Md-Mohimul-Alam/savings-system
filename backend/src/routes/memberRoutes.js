@@ -4,6 +4,7 @@ const {
   getAllMembers,
   getMemberById,
   getMyMemberProfile,
+  updateMyMemberProfile,
   approveUser,
   getPendingUsers,
   updateMember,
@@ -23,44 +24,67 @@ const {
 
 const router = express.Router();
 
+// --------------------------------------------------
+// AUTHENTICATION
+// --------------------------------------------------
+
 router.use(protect);
 router.use(auditMiddleware);
 
-// Logged-in member
+// --------------------------------------------------
+// LOGGED-IN MEMBER
+// --------------------------------------------------
+
+// Get own profile
 router.get(
   "/me/profile",
   getMyMemberProfile
 );
 
-// Admin only
+// Update own personal information
+// Editable:
+// - phone
+// - address
+// - nidNumber
+// - passportNumber
+router.patch(
+  "/me/profile",
+  updateMyMemberProfile
+);
+
+// --------------------------------------------------
+// ADMIN ONLY
+// --------------------------------------------------
+
+// Get pending users
 router.get(
   "/pending",
   authorizeRoles("admin"),
   getPendingUsers
 );
 
-// Admin only
+// Get all members
 router.get(
   "/",
   authorizeRoles("admin"),
   getAllMembers
 );
 
-// Admin only
-router.get(
-  "/:id",
-  authorizeRoles("admin"),
-  getMemberById
-);
-
-// Admin only
+// Approve user and create member profile
 router.post(
   "/approve/:userId",
   authorizeRoles("admin"),
   approveUser
 );
 
-// Admin only
+// Get one member
+router.get(
+  "/:id",
+  authorizeRoles("admin"),
+  getMemberById
+);
+
+// Update one member
 router.patch(
   "/:id",
   authorizeRoles("admin"),
