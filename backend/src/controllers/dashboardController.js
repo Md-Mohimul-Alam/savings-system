@@ -8,7 +8,14 @@ const {
   calculateOwnership,
 } = require("../utils/calculateOwnership");
 
-const getAdminDashboard = async (req, res) => {
+// --------------------------------------------------
+// ADMIN DASHBOARD
+// --------------------------------------------------
+
+const getAdminDashboard = async (
+  req,
+  res
+) => {
   try {
     const now = new Date();
 
@@ -27,15 +34,15 @@ const getAdminDashboard = async (req, res) => {
     ] = await Promise.all([
       Member.find({
         membershipStatus: "active",
-      }),
+      }).lean(),
 
-      Contribution.find(),
+      Contribution.find().lean(),
 
-      Transaction.find(),
+      Transaction.find().lean(),
 
-      Investment.find(),
+      Investment.find().lean(),
 
-      Expense.find(),
+      Expense.find().lean(),
     ]);
 
     const totalMembers =
@@ -121,9 +128,9 @@ const getAdminDashboard = async (req, res) => {
     const currentMonthContributions =
       contributions.filter(
         (item) =>
-          item.month ===
+          Number(item.month) ===
             currentMonth &&
-          item.year ===
+          Number(item.year) ===
             currentYear
       );
 
@@ -183,8 +190,11 @@ const getAdminDashboard = async (req, res) => {
           item.month
         ).padStart(2, "0")}`;
 
-        if (!monthlySavingsMap[key]) {
-          monthlySavingsMap[key] = 0;
+        if (
+          !monthlySavingsMap[key]
+        ) {
+          monthlySavingsMap[key] =
+            0;
         }
 
         monthlySavingsMap[key] +=
@@ -238,12 +248,18 @@ const getAdminDashboard = async (req, res) => {
           return {
             id:
               investment._id,
+
             name:
               investment.name,
+
             investedAmount,
+
             currentValue,
+
             profitLoss,
+
             roi,
+
             status:
               investment.status,
           };
@@ -283,7 +299,11 @@ const getAdminDashboard = async (req, res) => {
   } catch (error) {
     console.error(
       "Admin dashboard error:",
-      error
+      {
+        name: error?.name,
+        message: error?.message,
+        stack: error?.stack,
+      }
     );
 
     return res.status(500).json({
@@ -294,18 +314,37 @@ const getAdminDashboard = async (req, res) => {
   }
 };
 
+// --------------------------------------------------
+// MEMBER DASHBOARD
+// --------------------------------------------------
+
 const getMemberDashboard = async (
   req,
   res
 ) => {
   try {
+    console.log(
+      "Loading member dashboard for:",
+      req.user?._id
+    );
+
+    if (!req.user?._id) {
+      return res.status(401).json({
+        success: false,
+        message:
+          "Authentication required",
+      });
+    }
+
     const member =
       await Member.findOne({
         user: req.user._id,
-      }).populate(
-        "user",
-        "name email"
-      );
+      })
+        .populate(
+          "user",
+          "name email"
+        )
+        .lean();
 
     if (!member) {
       return res.status(404).json({
@@ -323,13 +362,34 @@ const getMemberDashboard = async (
     const currentYear =
       now.getFullYear();
 
-    const contributions =
-      await Contribution.find({
+    const [
+      contributions,
+      investments,
+      ownershipResult,
+    ] = await Promise.all([
+      Contribution.find({
         member: member._id,
-      }).sort({
-        year: -1,
-        month: -1,
-      });
+      })
+        .sort({
+          year: 1,
+          month: 1,
+        })
+        .lean(),
+
+      Investment.find({
+        status: "active",
+      })
+        .select(
+          "name investedAmount currentValue status"
+        )
+        .lean(),
+
+      calculateOwnership(),
+    ]);
+
+    // -----------------------------
+    // Contribution calculations
+    // -----------------------------
 
     const totalContribution =
       contributions.reduce(
@@ -361,39 +421,61 @@ const getMemberDashboard = async (
     const currentContribution =
       contributions.find(
         (item) =>
-          item.month ===
+          Number(item.month) ===
             currentMonth &&
-          item.year ===
+          Number(item.year) ===
             currentYear
       );
 
-    const ownershipResult =
-      await calculateOwnership();
+    // -----------------------------
+    // Ownership
+    // -----------------------------
 
-    const ownershipData =
-      ownershipResult.ownershipData.find(
-        (item) =>
-          item.memberId.toString() ===
-          member._id.toString()
-      );
+    let ownershipPercentage = 0;
 
-    const ownershipPercentage =
-      ownershipData?.ownershipPercentage ||
-      0;
+    if (
+      ownershipResult &&
+      Array.isArray(
+        ownershipResult.ownershipData
+      )
+    ) {
+      const ownershipData =
+        ownershipResult.ownershipData.find(
+          (item) =>
+            String(
+              item.memberId
+            ) ===
+            String(
+              member._id
+            )
+        );
 
-    const investments =
-      await Investment.find({
-        status: "active",
-      });
+      ownershipPercentage =
+        Number(
+          ownershipData
+            ?.ownershipPercentage ||
+            0
+        );
+    }
+
+    // -----------------------------
+    // Investment share
+    // -----------------------------
 
     const totalInvestmentShare =
       investments.reduce(
-        (sum, investment) => {
-          const share =
-            (Number(
+        (
+          sum,
+          investment
+        ) => {
+          const currentValue =
+            Number(
               investment.currentValue ||
                 0
-            ) *
+            );
+
+          const share =
+            (currentValue *
               ownershipPercentage) /
             100;
 
@@ -402,15 +484,13 @@ const getMemberDashboard = async (
         0
       );
 
+    // -----------------------------
+    // Monthly chart
+    // -----------------------------
+
     const monthlySavings =
-      contributions
-        .slice()
-        .sort(
-          (a, b) =>
-            a.year - b.year ||
-            a.month - b.month
-        )
-        .map((item) => ({
+      contributions.map(
+        (item) => ({
           month: `${item.year}-${String(
             item.month
           ).padStart(2, "0")}`,
@@ -418,7 +498,8 @@ const getMemberDashboard = async (
           amount: Number(
             item.paidAmount || 0
           ),
-        }));
+        })
+      );
 
     return res.status(200).json({
       success: true,
@@ -429,10 +510,14 @@ const getMemberDashboard = async (
           member.memberCode,
 
         name:
-          member.user?.name,
+          member.user?.name ||
+          "Member",
 
         monthlyContribution:
-          member.monthlyContribution,
+          Number(
+            member.monthlyContribution ||
+              0
+          ),
 
         membershipStatus:
           member.membershipStatus,
@@ -440,15 +525,22 @@ const getMemberDashboard = async (
 
       summary: {
         totalContribution,
+
         expectedContribution,
+
         outstandingContribution,
+
         ownershipPercentage,
+
         totalInvestmentShare,
       },
 
       currentMonth: {
-        month: currentMonth,
-        year: currentYear,
+        month:
+          currentMonth,
+
+        year:
+          currentYear,
 
         expectedAmount:
           Number(
@@ -458,12 +550,14 @@ const getMemberDashboard = async (
 
         paidAmount:
           Number(
-            currentContribution?.paidAmount ||
+            currentContribution
+              ?.paidAmount ||
               0
           ),
 
         status:
-          currentContribution?.status ||
+          currentContribution
+            ?.status ||
           "due",
       },
 
@@ -474,22 +568,41 @@ const getMemberDashboard = async (
   } catch (error) {
     console.error(
       "Member dashboard error:",
-      error
+      {
+        name:
+          error?.name,
+
+        message:
+          error?.message,
+
+        stack:
+          error?.stack,
+      }
     );
 
     return res.status(500).json({
       success: false,
+
       message:
-        "Failed to load dashboard",
+        process.env.NODE_ENV ===
+        "development"
+          ? error.message
+          : "Failed to load dashboard",
     });
   }
 };
+
+// --------------------------------------------------
+// ROLE-BASED DASHBOARD
+// --------------------------------------------------
 
 const getDashboardSummary = async (
   req,
   res
 ) => {
-  if (req.user.role === "admin") {
+  if (
+    req.user.role === "admin"
+  ) {
     return getAdminDashboard(
       req,
       res
