@@ -300,16 +300,25 @@ const getAdminDashboard = async (
     console.error(
       "Admin dashboard error:",
       {
-        name: error?.name,
-        message: error?.message,
-        stack: error?.stack,
+        name:
+          error?.name,
+
+        message:
+          error?.message,
+
+        stack:
+          error?.stack,
       }
     );
 
     return res.status(500).json({
       success: false,
       message:
+        error?.message ||
         "Failed to load dashboard",
+      errorName:
+        error?.name ||
+        "UnknownError",
     });
   }
 };
@@ -324,7 +333,7 @@ const getMemberDashboard = async (
 ) => {
   try {
     console.log(
-      "Loading member dashboard for:",
+      "Loading member dashboard for user:",
       req.user?._id
     );
 
@@ -335,6 +344,10 @@ const getMemberDashboard = async (
           "Authentication required",
       });
     }
+
+    // -----------------------------------
+    // Find member profile
+    // -----------------------------------
 
     const member =
       await Member.findOne({
@@ -350,9 +363,14 @@ const getMemberDashboard = async (
       return res.status(404).json({
         success: false,
         message:
-          "Member profile not found",
+          "Member profile not found. Please contact admin.",
       });
     }
+
+    console.log(
+      "Member found:",
+      String(member._id)
+    );
 
     const now = new Date();
 
@@ -362,10 +380,13 @@ const getMemberDashboard = async (
     const currentYear =
       now.getFullYear();
 
+    // -----------------------------------
+    // Load member data
+    // -----------------------------------
+
     const [
       contributions,
       investments,
-      ownershipResult,
     ] = await Promise.all([
       Contribution.find({
         member: member._id,
@@ -383,13 +404,21 @@ const getMemberDashboard = async (
           "name investedAmount currentValue status"
         )
         .lean(),
-
-      calculateOwnership(),
     ]);
 
-    // -----------------------------
+    console.log(
+      "Member contributions:",
+      contributions.length
+    );
+
+    console.log(
+      "Active investments:",
+      investments.length
+    );
+
+    // -----------------------------------
     // Contribution calculations
-    // -----------------------------
+    // -----------------------------------
 
     const totalContribution =
       contributions.reduce(
@@ -427,40 +456,84 @@ const getMemberDashboard = async (
             currentYear
       );
 
-    // -----------------------------
+    // -----------------------------------
     // Ownership
-    // -----------------------------
+    // Ownership errors should NOT crash
+    // the member dashboard.
+    // -----------------------------------
 
     let ownershipPercentage = 0;
 
-    if (
-      ownershipResult &&
-      Array.isArray(
-        ownershipResult.ownershipData
-      )
-    ) {
-      const ownershipData =
-        ownershipResult.ownershipData.find(
-          (item) =>
-            String(
-              item.memberId
-            ) ===
-            String(
-              member._id
-            )
-        );
+    try {
+      const ownershipResult =
+        await calculateOwnership();
 
-      ownershipPercentage =
-        Number(
-          ownershipData
-            ?.ownershipPercentage ||
-            0
+      console.log(
+        "Ownership calculation completed"
+      );
+
+      if (
+        ownershipResult &&
+        Array.isArray(
+          ownershipResult.ownershipData
+        )
+      ) {
+        const ownershipData =
+          ownershipResult
+            .ownershipData
+            .find(
+              (item) => {
+                const itemMemberId =
+                  item?.memberId
+                    ? String(
+                        item.memberId
+                      )
+                    : "";
+
+                return (
+                  itemMemberId ===
+                  String(
+                    member._id
+                  )
+                );
+              }
+            );
+
+        ownershipPercentage =
+          Number(
+            ownershipData
+              ?.ownershipPercentage ||
+              0
+          );
+      } else {
+        console.warn(
+          "calculateOwnership returned unexpected data:",
+          ownershipResult
         );
+      }
+    } catch (
+      ownershipError
+    ) {
+      console.error(
+        "Ownership calculation failed:",
+        {
+          name:
+            ownershipError?.name,
+
+          message:
+            ownershipError?.message,
+
+          stack:
+            ownershipError?.stack,
+        }
+      );
+
+      ownershipPercentage = 0;
     }
 
-    // -----------------------------
+    // -----------------------------------
     // Investment share
-    // -----------------------------
+    // -----------------------------------
 
     const totalInvestmentShare =
       investments.reduce(
@@ -484,9 +557,9 @@ const getMemberDashboard = async (
         0
       );
 
-    // -----------------------------
-    // Monthly chart
-    // -----------------------------
+    // -----------------------------------
+    // Savings chart
+    // -----------------------------------
 
     const monthlySavings =
       contributions.map(
@@ -501,13 +574,18 @@ const getMemberDashboard = async (
         })
       );
 
+    // -----------------------------------
+    // Member response
+    // -----------------------------------
+
     return res.status(200).json({
       success: true,
       role: "member",
 
       member: {
         memberCode:
-          member.memberCode,
+          member.memberCode ||
+          "",
 
         name:
           member.user?.name ||
@@ -520,7 +598,8 @@ const getMemberDashboard = async (
           ),
 
         membershipStatus:
-          member.membershipStatus,
+          member.membershipStatus ||
+          "active",
       },
 
       summary: {
@@ -567,7 +646,100 @@ const getMemberDashboard = async (
     });
   } catch (error) {
     console.error(
-      "Member dashboard error:",
+      "MEMBER DASHBOARD FATAL ERROR:",
+      {
+        name:
+          error?.name,
+
+        message:
+          error?.message,
+
+        stack:
+          error?.stack,
+
+        userId:
+          req.user?._id,
+      }
+    );
+
+    /*
+      TEMPORARY:
+      Return the actual error message
+      so production errors can be diagnosed.
+
+      After the issue is fixed,
+      you can change this back to:
+      "Failed to load dashboard"
+    */
+
+    return res.status(500).json({
+      success: false,
+
+      message:
+        error?.message ||
+        "Failed to load dashboard",
+
+      errorName:
+        error?.name ||
+        "UnknownError",
+    });
+  }
+};
+
+// --------------------------------------------------
+// ROLE-BASED DASHBOARD
+// --------------------------------------------------
+
+const getDashboardSummary = async (
+  req,
+  res
+) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message:
+          "Authentication required",
+      });
+    }
+
+    console.log(
+      "Dashboard request:",
+      {
+        userId:
+          req.user?._id,
+
+        role:
+          req.user?.role,
+      }
+    );
+
+    if (
+      req.user.role === "admin"
+    ) {
+      return getAdminDashboard(
+        req,
+        res
+      );
+    }
+
+    if (
+      req.user.role === "member"
+    ) {
+      return getMemberDashboard(
+        req,
+        res
+      );
+    }
+
+    return res.status(403).json({
+      success: false,
+      message:
+        "Invalid user role",
+    });
+  } catch (error) {
+    console.error(
+      "Dashboard routing error:",
       {
         name:
           error?.name,
@@ -582,37 +754,14 @@ const getMemberDashboard = async (
 
     return res.status(500).json({
       success: false,
-
       message:
-        process.env.NODE_ENV ===
-        "development"
-          ? error.message
-          : "Failed to load dashboard",
+        error?.message ||
+        "Failed to load dashboard",
+      errorName:
+        error?.name ||
+        "UnknownError",
     });
   }
-};
-
-// --------------------------------------------------
-// ROLE-BASED DASHBOARD
-// --------------------------------------------------
-
-const getDashboardSummary = async (
-  req,
-  res
-) => {
-  if (
-    req.user.role === "admin"
-  ) {
-    return getAdminDashboard(
-      req,
-      res
-    );
-  }
-
-  return getMemberDashboard(
-    req,
-    res
-  );
 };
 
 module.exports = {
