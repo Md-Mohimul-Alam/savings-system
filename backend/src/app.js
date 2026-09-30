@@ -4,7 +4,16 @@ const cookieParser = require("cookie-parser");
 
 const connectDB = require("./config/db");
 
-// Routes
+// Middleware
+const {
+  protect,
+} = require("./middleware/authMiddleware");
+
+const {
+  dataScopeMiddleware,
+} = require("./middleware/dataScopeMiddleware");
+
+// Existing routes
 const authRoutes = require("./routes/authRoutes");
 const memberRoutes = require("./routes/memberRoutes");
 const contributionRoutes = require("./routes/contributionRoutes");
@@ -19,6 +28,9 @@ const dashboardRoutes = require("./routes/dashboardRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
 const auditRoutes = require("./routes/auditRoutes");
 
+// New loan router factory
+const createLoanRouter = require("./routes/loanRoutes");
+
 const app = express();
 
 // --------------------------------------------------
@@ -32,61 +44,37 @@ const allowedOrigins = [
 ];
 
 if (process.env.FRONTEND_URL) {
-  const frontendUrl =
-    process.env.FRONTEND_URL.replace(
-      /\/$/,
-      ""
-    );
+  const frontendUrl = process.env.FRONTEND_URL
+    .trim()
+    .replace(/\/$/, "");
 
   if (
-    !allowedOrigins.includes(
-      frontendUrl
-    )
+    frontendUrl &&
+    !allowedOrigins.includes(frontendUrl)
   ) {
-    allowedOrigins.push(
-      frontendUrl
-    );
+    allowedOrigins.push(frontendUrl);
   }
 }
 
 // --------------------------------------------------
-// CORS OPTIONS
+// CORS
 // --------------------------------------------------
 
 const corsOptions = {
-  origin: (
-    origin,
-    callback
-  ) => {
-    // Allow curl, Postman, server-to-server
+  origin: (origin, callback) => {
+    // Requests without an Origin header:
+    // curl, Postman, and server-to-server requests.
     if (!origin) {
-      return callback(
-        null,
-        true
-      );
+      return callback(null, true);
     }
 
-    if (
-      allowedOrigins.includes(
-        origin
-      )
-    ) {
-      return callback(
-        null,
-        true
-      );
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
     }
 
-    console.error(
-      `CORS blocked for origin: ${origin}`
-    );
+    console.error(`CORS blocked for origin: ${origin}`);
 
-    // Do not throw a normal Error here.
-    // Just reject the origin.
-    return callback(
-      null,
-      false
-    );
+    return callback(null, false);
   },
 
   credentials: true,
@@ -108,31 +96,16 @@ const corsOptions = {
   optionsSuccessStatus: 204,
 };
 
-// --------------------------------------------------
-// CORS MIDDLEWARE
-// --------------------------------------------------
+app.use(cors(corsOptions));
 
-app.use(
-  cors(
-    corsOptions
-  )
-);
-
-// Explicitly handle OPTIONS before DB middleware
-app.options(
-  /.*/,
-  cors(
-    corsOptions
-  )
-);
+// Handle preflight before database connection middleware.
+app.options(/.*/, cors(corsOptions));
 
 // --------------------------------------------------
-// BODY PARSERS
+// BODY AND COOKIE PARSERS
 // --------------------------------------------------
 
-app.use(
-  express.json()
-);
+app.use(express.json());
 
 app.use(
   express.urlencoded({
@@ -140,205 +113,135 @@ app.use(
   })
 );
 
-// --------------------------------------------------
-// COOKIE PARSER
-// --------------------------------------------------
-
-app.use(
-  cookieParser()
-);
+app.use(cookieParser());
 
 // --------------------------------------------------
-// ROOT HEALTH CHECK
+// HEALTH CHECKS
 // --------------------------------------------------
 
-app.get(
-  "/",
-  (
-    req,
-    res
-  ) => {
-    return res
-      .status(200)
-      .json({
-        success: true,
-        message:
-          "Group Savings API is running",
-      });
-  }
-);
+app.get("/", (req, res) => {
+  return res.status(200).json({
+    success: true,
+    message: "Group Savings API is running",
+  });
+});
+
+app.get("/api/health", (req, res) => {
+  return res.status(200).json({
+    success: true,
+    message: "API is healthy",
+  });
+});
 
 // --------------------------------------------------
-// API HEALTH CHECK
+// DATABASE CONNECTION
 // --------------------------------------------------
 
-app.get(
-  "/api/health",
-  (
-    req,
-    res
-  ) => {
-    return res
-      .status(200)
-      .json({
-        success: true,
-        message:
-          "API is healthy",
-      });
-  }
-);
-
-// --------------------------------------------------
-// MONGODB CONNECTION MIDDLEWARE
-// --------------------------------------------------
-
-app.use(
-  "/api",
-  async (
-    req,
-    res,
-    next
-  ) => {
-    try {
-      await connectDB();
-
-      next();
-    } catch (
+app.use("/api", async (req, res, next) => {
+  try {
+    await connectDB();
+    return next();
+  } catch (error) {
+    console.error(
+      "Database connection middleware error:",
       error
-    ) {
-      console.error(
-        "Database connection middleware error:",
-        error
-      );
+    );
 
-      return res
-        .status(500)
-        .json({
-          success: false,
-          message:
-            "Database connection failed",
-        });
-    }
+    return res.status(500).json({
+      success: false,
+      message: "Database connection failed",
+    });
   }
-);
+});
 
 // --------------------------------------------------
-// API ROUTES
+// EXISTING API ROUTES
+// Their existing route-level middleware remains in place.
 // --------------------------------------------------
 
-app.use(
-  "/api/auth",
-  authRoutes
-);
+app.use("/api/auth", authRoutes);
 
-app.use(
-  "/api/members",
-  memberRoutes
-);
+app.use("/api/members", memberRoutes);
 
-app.use(
-  "/api/contributions",
-  contributionRoutes
-);
+app.use("/api/contributions", contributionRoutes);
 
-app.use(
-  "/api/transactions",
-  transactionRoutes
-);
+app.use("/api/transactions", transactionRoutes);
 
-app.use(
-  "/api/expenses",
-  expenseRoutes
-);
+app.use("/api/expenses", expenseRoutes);
 
-app.use(
-  "/api/investments",
-  investmentRoutes
-);
+app.use("/api/investments", investmentRoutes);
 
-app.use(
-  "/api/ownership",
-  ownershipRoutes
-);
+app.use("/api/ownership", ownershipRoutes);
 
 app.use(
   "/api/profit-distributions",
   profitDistributionRoutes
 );
 
-app.use(
-  "/api/join-requests",
-  joinRequestRoutes
-);
+app.use("/api/join-requests", joinRequestRoutes);
+
+app.use("/api/exit-requests", exitRequestRoutes);
+
+app.use("/api/dashboard", dashboardRoutes);
+
+app.use("/api/notifications", notificationRoutes);
+
+app.use("/api/audit-logs", auditRoutes);
+
+// --------------------------------------------------
+// LOAN ROUTES
+// Authentication runs before data-scope resolution.
+// Admin checks are enforced by the loan controller.
+// --------------------------------------------------
 
 app.use(
-  "/api/exit-requests",
-  exitRequestRoutes
-);
-
-app.use(
-  "/api/dashboard",
-  dashboardRoutes
-);
-
-app.use(
-  "/api/notifications",
-  notificationRoutes
-);
-
-app.use(
-  "/api/audit-logs",
-  auditRoutes
+  "/api/loans",
+  createLoanRouter({
+    authenticate: protect,
+    resolveDataScope: dataScopeMiddleware,
+  })
 );
 
 // --------------------------------------------------
 // 404 HANDLER
 // --------------------------------------------------
 
-app.use(
-  (
-    req,
-    res
-  ) => {
-    return res
-      .status(404)
-      .json({
-        success: false,
-        message:
-          "API route not found",
-      });
-  }
-);
+app.use((req, res) => {
+  return res.status(404).json({
+    success: false,
+    message: "API route not found",
+  });
+});
 
 // --------------------------------------------------
 // GLOBAL ERROR HANDLER
 // --------------------------------------------------
 
-app.use(
-  (
-    err,
-    req,
-    res,
-    next
-  ) => {
-    console.error(
-      "Unhandled error:",
-      err
-    );
+app.use((err, req, res, next) => {
+  console.error("Unhandled error:", err);
 
-    return res
-      .status(
-        err.status ||
-          500
-      )
-      .json({
-        success: false,
-        message:
-          err.message ||
-          "Internal server error",
-      });
+  if (res.headersSent) {
+    return next(err);
   }
-);
 
-module.exports =
-  app;
+  const candidate = Number(
+    err.statusCode || err.status || 500
+  );
+
+  const status =
+    Number.isInteger(candidate) &&
+    candidate >= 400 &&
+    candidate <= 599
+      ? candidate
+      : 500;
+
+  return res.status(status).json({
+    success: false,
+    message:
+      status >= 500
+        ? "Internal server error"
+        : err.message || "Request failed",
+  });
+});
+
+module.exports = app;

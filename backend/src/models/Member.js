@@ -2,11 +2,18 @@ const mongoose = require("mongoose");
 
 const memberSchema = new mongoose.Schema(
   {
+    // Unregistered members have no user field.
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true,
-      unique: true,
+      default: undefined,
+    },
+
+    // Name can exist independently of a login account.
+    name: {
+      type: String,
+      trim: true,
+      default: "",
     },
 
     memberCode: {
@@ -19,11 +26,13 @@ const memberSchema = new mongoose.Schema(
     phone: {
       type: String,
       trim: true,
+      default: "",
     },
 
     address: {
       type: String,
       trim: true,
+      default: "",
     },
 
     monthlyContribution: {
@@ -39,18 +48,30 @@ const memberSchema = new mongoose.Schema(
 
     membershipStatus: {
       type: String,
-      enum: [
-        "active",
-        "inactive",
-        "exited",
-      ],
+      enum: ["active", "inactive", "exited"],
       default: "active",
     },
 
+    // Personal savings only.
+    // Includes historical savings after migration.
+    // Excludes fines, loans, and loan repayments.
     totalContribution: {
       type: Number,
       default: 0,
       min: 0,
+    },
+
+    // Informational subset of totalContribution.
+    // Never add this again when calculating total savings.
+    openingContribution: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    openingBalanceDate: {
+      type: Date,
+      default: null,
     },
 
     ownershipPercentage: {
@@ -75,10 +96,7 @@ const memberSchema = new mongoose.Schema(
 
     dataScope: {
       type: String,
-      enum: [
-        "live",
-        "demo",
-      ],
+      enum: ["live", "demo"],
       default: "live",
       index: true,
     },
@@ -88,13 +106,30 @@ const memberSchema = new mongoose.Schema(
   }
 );
 
+// Only linked accounts participate in this unique index.
+// Multiple unregistered member profiles are allowed.
+memberSchema.index(
+  { user: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      user: { $type: "objectId" },
+    },
+  }
+);
+
 memberSchema.index({
   dataScope: 1,
   membershipStatus: 1,
 });
 
-module.exports =
-  mongoose.model(
-    "Member",
-    memberSchema
-  );
+memberSchema.pre("validate", function () {
+  if (!this.user && !this.name?.trim()) {
+    this.invalidate(
+      "name",
+      "Name is required for a member without a login account"
+    );
+  }
+});
+
+module.exports = mongoose.model("Member", memberSchema);
