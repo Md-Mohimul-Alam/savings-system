@@ -8,6 +8,16 @@ const {
   createNotification,
 } = require("../services/notificationService");
 
+const CashLock =
+  mongoose.models.CashLock ||
+  mongoose.model(
+    "CashLock",
+    new mongoose.Schema({
+      _id: { type: String },
+      version: { type: Number, default: 0 },
+    })
+  );
+
 const memberPopulation = {
   path: "member",
   populate: {
@@ -16,67 +26,104 @@ const memberPopulation = {
   },
 };
 
+// --------------------------------------------------
+// HELPERS
+// --------------------------------------------------
+
 const fail = (message, statusCode = 400) => {
   const error = new Error(message);
   error.statusCode = statusCode;
   throw error;
 };
 
+const validateRequest = (req, adminOnly = false) => {
+  if (!req.user?._id) {
+    fail("Authentication required", 401);
+  }
+
+  if (!["live", "demo"].includes(req.dataScope)) {
+    fail("Invalid data scope");
+  }
+
+  if (adminOnly && req.user.role !== "admin") {
+    fail("Admin access required", 403);
+  }
+};
+
 const validateId = (value, label) => {
-  if (!mongoose.Types.ObjectId.isValid(value)) {
+  if (
+    typeof value !== "string" ||
+    !/^[a-f\d]{24}$/i.test(value)
+  ) {
     fail(`Invalid ${label}`);
   }
 };
 
 const money = (value, label) => {
   if (
-    value === null ||
-    value === "" ||
-    typeof value === "boolean" ||
-    !["number", "string"].includes(typeof value)
+    !["number", "string"].includes(typeof value) ||
+    (typeof value === "string" && !value.trim())
   ) {
     fail(`${label} must be a valid amount`);
   }
 
   const amount = Number(value);
+  const paisa = Math.round(amount * 100);
 
   if (
     !Number.isFinite(amount) ||
     amount < 0 ||
-    !Number.isSafeInteger(Math.round(amount * 100)) ||
-    Math.abs(amount * 100 - Math.round(amount * 100)) > 0.000001
+    !Number.isSafeInteger(paisa) ||
+    Math.abs(amount * 100 - paisa) > 0.000001
   ) {
-    fail(`${label} must be non-negative with at most 2 decimals`);
+    fail(
+      `${label} must be non-negative with at most 2 decimals`
+    );
   }
 
-  return amount;
+  return paisa / 100;
 };
 
-const validatePeriod = (month, year) => {
-  const m = Number(month);
-  const y = Number(year);
+const toPaisa = (amount) => Math.round(amount * 100);
 
-  if (!Number.isInteger(m) || m < 1 || m > 12) {
-    fail("Month must be an integer from 1 to 12");
+const integer = (value, label, minimum, maximum) => {
+  if (
+    !["number", "string"].includes(typeof value) ||
+    (typeof value === "string" && !value.trim())
+  ) {
+    fail(`Invalid ${label}`);
   }
 
-  if (!Number.isInteger(y) || y < 2026 || y > 9999) {
-    fail("Monthly records must use a year from 2026 onward");
-  }
-
-  return { month: m, year: y };
-};
-
-// 16th, 00:00 Bangladesh time = 15th, 18:00 UTC.
-const fineEligibleAt = (month, year) =>
-  new Date(Date.UTC(year, month - 1, 15, 18));
-
-const paymentDate = (value) => {
-  const date = value === undefined ? new Date() : new Date(value);
+  const number = Number(value);
 
   if (
-    value === null ||
-    value === "" ||
+    !Number.isInteger(number) ||
+    number < minimum ||
+    number > maximum
+  ) {
+    fail(
+      `${label} must be an integer from ${minimum} to ${maximum}`
+    );
+  }
+
+  return number;
+};
+
+const validatePeriod = (month, year) => ({
+  month: integer(month, "Month", 1, 12),
+  year: integer(year, "Year", 2026, 9999),
+});
+
+const readPaymentDate = (value) => {
+  if (value === undefined) return null;
+
+  if (typeof value !== "string" || !value.trim()) {
+    fail("Payment date must be a date string");
+  }
+
+  const date = new Date(value);
+
+  if (
     Number.isNaN(date.getTime()) ||
     date.getTime() > Date.now()
   ) {
@@ -86,43 +133,29 @@ const paymentDate = (value) => {
   return date;
 };
 
-// Calculate outstanding fines without writing during a GET request.
-// Scheduled assessment can persist these fines separately.
-const serializeContribution = (document) => {
-  const item = document.toObject();
-  const expected = Number(item.expectedAmount || 0);
-  const paid = Number(item.paidAmount || 0);
+const fineEligibleAt = (month, year) =>
+  new Date(Date.UTC(year, month - 1, 15, 18));
 
-  let assessedFine = Number(item.fineAmount || 0);
+const savingsStatus = (paid, expected) =>
+  paid >= expected ? "paid" : paid > 0 ? "partial" : "due";
 
-  if (
-    paid < expected &&
-    new Date() >= fineEligibleAt(item.month, item.year)
-  ) {
-    assessedFine = 50;
+const checkFineSchema = () => {
+  for (const field of [
+    "fineAmount",
+    "finePaidAmount",
+    "fineAppliedAt",
+    "finePaymentDate",
+  ]) {
+    if (!Contribution.schema.path(field)) {
+      fail(`Contribution model is missing ${field}`, 409);
+    }
   }
 
-  const finePaid = Number(item.finePaidAmount || 0);
-  const remainingAmount = Math.max(0, expected - paid);
-  const remainingFine = Math.max(0, assessedFine - finePaid);
+  const types = Transaction.schema.path("type")?.enumValues || [];
 
-  return {
-    ...item,
-    fineAmount: assessedFine,
-    remainingAmount,
-    remainingFine,
-    totalDue: remainingAmount + remainingFine,
-    totalPaid: paid + finePaid,
-    status: paid >= expected ? "paid" : paid > 0 ? "partial" : "due",
-    fineStatus:
-      assessedFine === 0
-        ? "not_applicable"
-        : remainingFine === 0
-          ? "paid"
-          : finePaid > 0
-            ? "partial"
-            : "due",
-  };
+  if (!types.includes("FINE")) {
+    fail("Transaction model must allow the FINE type", 409);
+  }
 };
 
 const handleError = (res, error, fallback) => {
@@ -131,7 +164,9 @@ const handleError = (res, error, fallback) => {
   const status =
     error.statusCode ||
     (error.code === 11000 ? 409 : 0) ||
-    (["ValidationError", "CastError"].includes(error.name) ? 400 : 500);
+    (["ValidationError", "CastError"].includes(error.name)
+      ? 400
+      : 500);
 
   return res.status(status).json({
     success: false,
@@ -144,49 +179,152 @@ const handleError = (res, error, fallback) => {
   });
 };
 
-const notifyMember = async (member, contribution) => {
-  if (!member.user) return;
+// --------------------------------------------------
+// SERIALIZATION
+// Show overdue fines without writing during GET requests.
+// --------------------------------------------------
+
+const serializeContribution = (document) => {
+  const item = document.toObject();
+
+  const expected = money(item.expectedAmount, "Expected amount");
+  const paid = money(item.paidAmount ?? 0, "Paid amount");
+  const finePaid = money(
+    item.finePaidAmount ?? 0,
+    "Fine paid amount"
+  );
+
+  let assessedFine = money(
+    item.fineAmount ?? 0,
+    "Assessed fine"
+  );
+
+  if (
+    paid < expected &&
+    new Date() >= fineEligibleAt(item.month, item.year)
+  ) {
+    assessedFine = Math.max(assessedFine, 50);
+  }
+
+  const remainingAmount =
+    Math.max(0, toPaisa(expected) - toPaisa(paid)) / 100;
+
+  const remainingFine =
+    Math.max(0, toPaisa(assessedFine) - toPaisa(finePaid)) / 100;
+
+  return {
+    ...item,
+    fineAmount: assessedFine,
+    remainingAmount,
+    remainingFine,
+    totalDue:
+      (toPaisa(remainingAmount) + toPaisa(remainingFine)) / 100,
+    totalPaid: (toPaisa(paid) + toPaisa(finePaid)) / 100,
+    status: savingsStatus(paid, expected),
+    fineStatus:
+      assessedFine === 0
+        ? "not_applicable"
+        : remainingFine === 0
+          ? "paid"
+          : finePaid > 0
+            ? "partial"
+            : "due",
+  };
+};
+
+// --------------------------------------------------
+// CASH LOCK AND TRANSACTION
+// --------------------------------------------------
+
+const withCashTransaction = async (dataScope, action) => {
+  try {
+    await CashLock.updateOne(
+      { _id: dataScope },
+      { $setOnInsert: { version: 0 } },
+      { upsert: true }
+    );
+  } catch (error) {
+    if (error.code !== 11000) throw error;
+  }
+
+  const session = await mongoose.startSession();
 
   try {
-    await createNotification({
-      user: member.user,
-      title: "Contribution Recorded",
-      message:
-        `Savings: ৳${contribution.paidAmount}; ` +
-        `fine paid: ৳${contribution.finePaidAmount || 0} ` +
-        `for ${contribution.month}/${contribution.year}.`,
-      type: "CONTRIBUTION",
-      link: "/dashboard/my-contributions",
+    await session.withTransaction(async () => {
+      await CashLock.updateOne(
+        { _id: dataScope },
+        { $inc: { version: 1 } },
+        { session }
+      );
+
+      await action(session);
     });
-  } catch (error) {
-    // Payment already committed; notification failure must not
-    // report the payment as failed and encourage a duplicate retry.
-    console.error("Contribution notification failed:", error);
+  } finally {
+    await session.endSession();
   }
 };
+
+const checkAvailableCash = async (
+  requiredPaisa,
+  dataScope,
+  session
+) => {
+  const entries = await Transaction.find({ dataScope })
+    .select("amount direction")
+    .session(session)
+    .lean();
+
+  let balancePaisa = 0;
+
+  for (const entry of entries) {
+    const amount = money(entry.amount, "Ledger amount");
+
+    if (!["IN", "OUT"].includes(entry.direction)) {
+      fail("Invalid ledger direction; reconcile the ledger", 409);
+    }
+
+    balancePaisa +=
+      toPaisa(amount) * (entry.direction === "IN" ? 1 : -1);
+
+    if (!Number.isSafeInteger(balancePaisa)) {
+      fail("Ledger balance exceeds the supported range", 409);
+    }
+  }
+
+  if (requiredPaisa > balancePaisa) {
+    fail(
+      "Insufficient available cash to reduce recorded payments",
+      409
+    );
+  }
+};
+
+// --------------------------------------------------
+// LEDGER AND NOTIFICATIONS
+// --------------------------------------------------
 
 const writeTransaction = async ({
   req,
   session,
   contribution,
   type,
-  difference,
+  differencePaisa,
   date,
 }) => {
-  if (difference === 0) return;
+  if (differencePaisa === 0) return;
 
   await Transaction.create(
     [
       {
         type,
-        direction: difference > 0 ? "IN" : "OUT",
-        amount: Math.abs(difference),
+        direction: differencePaisa > 0 ? "IN" : "OUT",
+        amount: Math.abs(differencePaisa) / 100,
         member: contribution.member,
         referenceType: "Contribution",
         referenceId: contribution._id,
         description:
           `${type === "FINE" ? "Fine" : "Savings"} ` +
-          `${difference > 0 ? "recorded" : "corrected"} ` +
+          `${differencePaisa > 0 ? "recorded" : "corrected"} ` +
           `for ${contribution.month}/${contribution.year}`,
         transactionDate: date,
         createdBy: req.user._id,
@@ -197,27 +335,71 @@ const writeTransaction = async ({
   );
 };
 
-// paidAmount and finePaidAmount are cumulative totals for this month.
-// Example: changing paidAmount from 500 to 1000 adds only 500.
-const saveContribution = async (req, res, isUpdate) => {
-  let session;
+const notifyMember = async (member, contribution, isUpdate) => {
+  if (!member.user) return;
 
   try {
+    await createNotification({
+      user: member.user,
+      title: isUpdate
+        ? "Contribution Updated"
+        : "Contribution Recorded",
+      message:
+        `Savings: ৳${contribution.paidAmount}; ` +
+        `fine paid: ৳${contribution.finePaidAmount || 0} ` +
+        `for ${contribution.month}/${contribution.year}.`,
+      type: "CONTRIBUTION",
+      link: "/dashboard/my-contributions",
+    });
+  } catch (error) {
+    // Financial changes have already committed.
+    console.error("Contribution notification failed:", error);
+  }
+};
+
+// --------------------------------------------------
+// CREATE / UPDATE
+//
+// paidAmount and finePaidAmount are cumulative totals.
+// Changing savings from 500 to 1000 records only 500.
+// --------------------------------------------------
+
+const saveContribution = async (req, res, isUpdate) => {
+  try {
+    validateRequest(req, true);
+    checkFineSchema();
+
     const body = req.body || {};
 
-    if (!req.dataScope) {
-      fail("Data scope is missing", 400);
+    const permittedFields = isUpdate
+      ? ["paidAmount", "finePaidAmount", "paymentDate", "note"]
+      : [
+          "memberId",
+          "month",
+          "year",
+          "paidAmount",
+          "finePaidAmount",
+          "paymentDate",
+          "note",
+        ];
+
+    const unsupported = Object.keys(body).filter(
+      (field) => !permittedFields.includes(field)
+    );
+
+    if (unsupported.length) {
+      fail(`Unsupported fields: ${unsupported.join(", ")}`);
     }
 
     if (isUpdate) {
       validateId(req.params.id, "contribution ID");
 
       if (
-        body.memberId !== undefined ||
-        body.month !== undefined ||
-        body.year !== undefined
+        body.paidAmount === undefined &&
+        body.finePaidAmount === undefined &&
+        body.note === undefined
       ) {
-        fail("Member, month and year cannot be changed");
+        fail("Provide a savings total, fine total, or note");
       }
     } else {
       validateId(body.memberId, "member ID");
@@ -238,18 +420,21 @@ const saveContribution = async (req, res, isUpdate) => {
         ? undefined
         : money(body.finePaidAmount, "Fine paid amount");
 
-    if (body.note !== undefined && typeof body.note !== "string") {
+    if (
+      body.note !== undefined &&
+      typeof body.note !== "string"
+    ) {
       fail("Note must be text");
     }
 
-    const receiptDate = paymentDate(body.paymentDate);
+    const suppliedDate = readPaymentDate(body.paymentDate);
 
-    session = await mongoose.startSession();
+    let responseContribution;
+    let notificationMember;
+    let notificationContribution;
+    let shouldNotify = false;
 
-    let member;
-    let savedId;
-
-    await session.withTransaction(async () => {
+    await withCashTransaction(req.dataScope, async (session) => {
       let contribution;
 
       if (isUpdate) {
@@ -258,7 +443,9 @@ const saveContribution = async (req, res, isUpdate) => {
           dataScope: req.dataScope,
         }).session(session);
 
-        if (!contribution) fail("Contribution not found", 404);
+        if (!contribution) {
+          fail("Contribution not found", 404);
+        }
       } else {
         const period = validatePeriod(body.month, body.year);
 
@@ -282,12 +469,24 @@ const saveContribution = async (req, res, isUpdate) => {
         });
       }
 
-      member = await Member.findOne({
+      // 2021–2025 savings are imported separately as opening balances.
+      validatePeriod(contribution.month, contribution.year);
+
+      const member = await Member.findOne({
         _id: contribution.member,
         dataScope: req.dataScope,
       }).session(session);
 
-      if (!member) fail("Member not found", 404);
+      if (!member) {
+        fail("Member not found", 404);
+      }
+
+      if (member.membershipStatus !== "active") {
+        fail(
+          "Only active members can have contributions recorded or corrected",
+          409
+        );
+      }
 
       if (!isUpdate) {
         contribution.expectedAmount = money(
@@ -296,9 +495,21 @@ const saveContribution = async (req, res, isUpdate) => {
         );
       }
 
-      const expected = Number(contribution.expectedAmount);
-      const oldSavings = Number(contribution.paidAmount || 0);
-      const oldFinePaid = Number(contribution.finePaidAmount || 0);
+      const expected = money(
+        contribution.expectedAmount,
+        "Expected amount"
+      );
+
+      const oldSavings = money(
+        contribution.paidAmount ?? 0,
+        "Existing savings"
+      );
+
+      const oldFinePaid = money(
+        contribution.finePaidAmount ?? 0,
+        "Existing fine payment"
+      );
+
       const newSavings = savings ?? oldSavings;
       const newFinePaid = finePaid ?? oldFinePaid;
 
@@ -309,51 +520,124 @@ const saveContribution = async (req, res, isUpdate) => {
         );
       }
 
-      const savingsDifference =
-        Math.round((newSavings - oldSavings) * 100) / 100;
+      const savingsDifferencePaisa =
+        toPaisa(newSavings) - toPaisa(oldSavings);
 
-      const fineDifference =
-        Math.round((newFinePaid - oldFinePaid) * 100) / 100;
+      const fineDifferencePaisa =
+        toPaisa(newFinePaid) - toPaisa(oldFinePaid);
+
+      const hasPaymentChange =
+        savingsDifferencePaisa !== 0 ||
+        fineDifferencePaisa !== 0;
+
+      // Require actual payment dates for money received.
+      if (
+        (savingsDifferencePaisa > 0 || fineDifferencePaisa > 0) &&
+        !suppliedDate
+      ) {
+        fail(
+          "Actual payment date is required when recording savings or fines"
+        );
+      }
+
+      if (suppliedDate && !hasPaymentChange) {
+        fail(
+          "Date-only corrections require a separate ledger correction"
+        );
+      }
+
+      // Reductions without a supplied date are recorded now.
+      const receiptDate = suppliedDate || new Date();
+
+      const netDifferencePaisa =
+        savingsDifferencePaisa + fineDifferencePaisa;
+
+      if (!Number.isSafeInteger(netDifferencePaisa)) {
+        fail("Payment change exceeds the supported range");
+      }
 
       const deadline = fineEligibleAt(
         contribution.month,
         contribution.year
       );
 
-      // Preserve previously assessed fines.
-      let assessedFine = Number(contribution.fineAmount || 0);
+      let assessedFine = money(
+        contribution.fineAmount ?? 0,
+        "Assessed fine"
+      );
 
-      // A late payment is fined if savings were incomplete before it.
-      // A remaining unpaid balance is also overdue as of today.
+      // Retain existing assessments.
+      // New full payments received before the deadline incur no fine,
+      // even if entered later.
       if (
-        (savingsDifference > 0 &&
+        (savingsDifferencePaisa > 0 &&
           oldSavings < expected &&
           receiptDate >= deadline) ||
         (newSavings < expected && new Date() >= deadline)
       ) {
-        assessedFine = 50;
+        assessedFine = Math.max(assessedFine, 50);
       }
 
       if (newFinePaid > assessedFine) {
         fail("Fine payment exceeds the assessed fine");
       }
 
+      if (
+        fineDifferencePaisa > 0 &&
+        receiptDate < deadline
+      ) {
+        fail("Fine payment cannot precede the fine deadline");
+      }
+
+      // Check the net cash reduction, including reclassifications.
+      if (netDifferencePaisa < 0) {
+        await checkAvailableCash(
+          -netDifferencePaisa,
+          req.dataScope,
+          session
+        );
+      }
+
+      if (savingsDifferencePaisa !== 0) {
+        const currentTotal = money(
+          member.totalContribution ?? 0,
+          "Member total contribution"
+        );
+
+        const nextTotalPaisa =
+          toPaisa(currentTotal) + savingsDifferencePaisa;
+
+        if (
+          !Number.isSafeInteger(nextTotalPaisa) ||
+          nextTotalPaisa < 0
+        ) {
+          fail(
+            "Member savings need reconciliation before this correction",
+            409
+          );
+        }
+
+        // Preserve opening savings by applying only this payment delta.
+        member.totalContribution = nextTotalPaisa / 100;
+        await member.save({ session });
+      }
+
+      contribution.paidAmount = newSavings;
+      contribution.finePaidAmount = newFinePaid;
       contribution.fineAmount = assessedFine;
+      contribution.status = savingsStatus(newSavings, expected);
 
       if (assessedFine > 0 && !contribution.fineAppliedAt) {
         contribution.fineAppliedAt = deadline;
       }
 
-      contribution.paidAmount = newSavings;
-      contribution.finePaidAmount = newFinePaid;
-
-      if (savingsDifference > 0) {
+      if (savingsDifferencePaisa > 0) {
         contribution.paymentDate = receiptDate;
       } else if (newSavings === 0) {
         contribution.paymentDate = null;
       }
 
-      if (fineDifference > 0) {
+      if (fineDifferencePaisa > 0) {
         contribution.finePaymentDate = receiptDate;
       } else if (newFinePaid === 0) {
         contribution.finePaymentDate = null;
@@ -365,63 +649,68 @@ const saveContribution = async (req, res, isUpdate) => {
 
       await contribution.save({ session });
 
-      if (savingsDifference !== 0) {
-        const result = await Member.updateOne(
-          {
-            _id: member._id,
-            dataScope: req.dataScope,
-            totalContribution: {
-              $gte: Math.max(0, -savingsDifference),
-            },
-          },
-          { $inc: { totalContribution: savingsDifference } },
-          { session }
-        );
-
-        if (result.matchedCount !== 1) {
-          fail("Member savings need reconciliation before this correction", 409);
-        }
-      }
-
       await writeTransaction({
         req,
         session,
         contribution,
-        type: savingsDifference < 0 ? "ADJUSTMENT" : "CONTRIBUTION",
-        difference: savingsDifference,
+        type:
+          savingsDifferencePaisa < 0
+            ? "ADJUSTMENT"
+            : "CONTRIBUTION",
+        differencePaisa: savingsDifferencePaisa,
         date: receiptDate,
       });
 
+      // Keeping FINE on reversals preserves net collected-fine totals.
       await writeTransaction({
         req,
         session,
         contribution,
         type: "FINE",
-        difference: fineDifference,
+        differencePaisa: fineDifferencePaisa,
         date: receiptDate,
       });
 
-      savedId = contribution._id;
+      // Populate sequentially within the transaction.
+      const populated = await Contribution.findOne({
+        _id: contribution._id,
+        dataScope: req.dataScope,
+      })
+        .session(session)
+        .populate(memberPopulation);
+
+      if (!populated) {
+        fail("Saved contribution could not be loaded", 409);
+      }
+
+      responseContribution = serializeContribution(populated);
+      notificationMember = { user: member.user };
+      notificationContribution = {
+        paidAmount: contribution.paidAmount,
+        finePaidAmount: contribution.finePaidAmount,
+        month: contribution.month,
+        year: contribution.year,
+      };
+      shouldNotify = hasPaymentChange;
     });
 
-    const saved = await Contribution.findOne({
-      _id: savedId,
-      dataScope: req.dataScope,
-    }).populate(memberPopulation);
-
-    await notifyMember(member, saved);
+    if (shouldNotify) {
+      await notifyMember(
+        notificationMember,
+        notificationContribution,
+        isUpdate
+      );
+    }
 
     return res.status(isUpdate ? 200 : 201).json({
       success: true,
       message: isUpdate
         ? "Contribution updated successfully"
         : "Contribution added successfully",
-      contribution: serializeContribution(saved),
+      contribution: responseContribution,
     });
   } catch (error) {
     return handleError(res, error, "Failed to save contribution");
-  } finally {
-    if (session) await session.endSession();
   }
 };
 
@@ -431,29 +720,24 @@ const addContribution = (req, res) =>
 const updateContribution = (req, res) =>
   saveContribution(req, res, true);
 
+// --------------------------------------------------
+// READ ENDPOINTS
+// Existing route permissions still apply.
+// --------------------------------------------------
+
 const getAllContributions = async (req, res) => {
   try {
+    validateRequest(req);
+
     const filter = { dataScope: req.dataScope };
     const { month, year, memberId, status } = req.query;
 
     if (month !== undefined) {
-      const m = Number(month);
-
-      if (!Number.isInteger(m) || m < 1 || m > 12) {
-        fail("Invalid month");
-      }
-
-      filter.month = m;
+      filter.month = integer(month, "Month", 1, 12);
     }
 
     if (year !== undefined) {
-      const y = Number(year);
-
-      if (!Number.isInteger(y) || y < 2021 || y > 9999) {
-        fail("Invalid year");
-      }
-
-      filter.year = y;
+      filter.year = integer(year, "Year", 2021, 9999);
     }
 
     if (memberId !== undefined) {
@@ -461,19 +745,24 @@ const getAllContributions = async (req, res) => {
       filter.member = memberId;
     }
 
-    if (status !== undefined) {
-      if (!["due", "partial", "paid"].includes(status)) {
-        fail("Invalid status");
-      }
-
-      filter.status = status;
+    if (
+      status !== undefined &&
+      !["due", "partial", "paid"].includes(status)
+    ) {
+      fail("Invalid status");
     }
 
     const records = await Contribution.find(filter)
       .populate(memberPopulation)
-      .sort({ year: -1, month: -1, createdAt: -1 });
+      .sort({ year: -1, month: -1, createdAt: -1, _id: -1 });
 
-    const contributions = records.map(serializeContribution);
+    let contributions = records.map(serializeContribution);
+
+    if (status !== undefined) {
+      contributions = contributions.filter(
+        (item) => item.status === status
+      );
+    }
 
     return res.status(200).json({
       success: true,
@@ -487,6 +776,7 @@ const getAllContributions = async (req, res) => {
 
 const getContributionById = async (req, res) => {
   try {
+    validateRequest(req);
     validateId(req.params.id, "contribution ID");
 
     const contribution = await Contribution.findOne({
@@ -494,7 +784,9 @@ const getContributionById = async (req, res) => {
       dataScope: req.dataScope,
     }).populate(memberPopulation);
 
-    if (!contribution) fail("Contribution not found", 404);
+    if (!contribution) {
+      fail("Contribution not found", 404);
+    }
 
     return res.status(200).json({
       success: true,
@@ -507,19 +799,23 @@ const getContributionById = async (req, res) => {
 
 const getMyContributions = async (req, res) => {
   try {
+    validateRequest(req);
+
     const member = await Member.findOne({
       user: req.user._id,
       dataScope: req.dataScope,
     });
 
-    if (!member) fail("Member profile not found", 404);
+    if (!member) {
+      fail("Member profile not found", 404);
+    }
 
     const records = await Contribution.find({
       member: member._id,
       dataScope: req.dataScope,
     })
       .populate(memberPopulation)
-      .sort({ year: -1, month: -1 });
+      .sort({ year: -1, month: -1, _id: -1 });
 
     const contributions = records.map(serializeContribution);
 

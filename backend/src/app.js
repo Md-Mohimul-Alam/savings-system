@@ -4,7 +4,6 @@ const cookieParser = require("cookie-parser");
 
 const connectDB = require("./config/db");
 
-// Middleware
 const {
   protect,
 } = require("./middleware/authMiddleware");
@@ -13,7 +12,7 @@ const {
   dataScopeMiddleware,
 } = require("./middleware/dataScopeMiddleware");
 
-// Existing routes
+// Routes
 const authRoutes = require("./routes/authRoutes");
 const memberRoutes = require("./routes/memberRoutes");
 const contributionRoutes = require("./routes/contributionRoutes");
@@ -28,7 +27,6 @@ const dashboardRoutes = require("./routes/dashboardRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
 const auditRoutes = require("./routes/auditRoutes");
 
-// New loan router factory
 const createLoanRouter = require("./routes/loanRoutes");
 
 const app = express();
@@ -62,7 +60,7 @@ if (process.env.FRONTEND_URL) {
 
 const corsOptions = {
   origin: (origin, callback) => {
-    // Requests without an Origin header:
+    // Allow requests without an Origin header:
     // curl, Postman, and server-to-server requests.
     if (!origin) {
       return callback(null, true);
@@ -98,11 +96,11 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
-// Handle preflight before database connection middleware.
+// Handle preflight before database middleware.
 app.options(/.*/, cors(corsOptions));
 
 // --------------------------------------------------
-// BODY AND COOKIE PARSERS
+// REQUEST PARSERS
 // --------------------------------------------------
 
 app.use(express.json());
@@ -117,6 +115,7 @@ app.use(cookieParser());
 
 // --------------------------------------------------
 // HEALTH CHECKS
+// These check API availability, not database readiness.
 // --------------------------------------------------
 
 app.get("/", (req, res) => {
@@ -155,8 +154,9 @@ app.use("/api", async (req, res, next) => {
 });
 
 // --------------------------------------------------
-// EXISTING API ROUTES
-// Their existing route-level middleware remains in place.
+// API ROUTES
+// Authentication, permissions, and auditing are
+// applied inside their respective route files.
 // --------------------------------------------------
 
 app.use("/api/auth", authRoutes);
@@ -190,8 +190,7 @@ app.use("/api/audit-logs", auditRoutes);
 
 // --------------------------------------------------
 // LOAN ROUTES
-// Authentication runs before data-scope resolution.
-// Admin checks are enforced by the loan controller.
+// loanRoutes.js exports a router factory.
 // --------------------------------------------------
 
 app.use(

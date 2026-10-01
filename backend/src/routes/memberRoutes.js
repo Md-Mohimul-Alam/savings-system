@@ -30,15 +30,11 @@ const {
 
 const router = express.Router();
 
-// Authentication must run before data-scope resolution.
 router.use(protect);
 router.use(dataScopeMiddleware);
 router.use(auditMiddleware);
 
-// --------------------------------------------------
-// OWN PROFILE
-// --------------------------------------------------
-
+// Own profile.
 router.get(
   "/me/profile",
   getMyMemberProfile
@@ -49,26 +45,21 @@ router.patch(
   updateMyMemberProfile
 );
 
-// --------------------------------------------------
-// ADMIN ROUTES
-// --------------------------------------------------
-
+// All remaining routes require admin access.
 router.use(authorizeRoles("admin"));
 
-// Keep specific paths before /:id.
 router.get(
   "/pending",
   getPendingUsers
 );
 
-// Approve registration.
-// Supply body.memberId to link an existing profile.
+// Optional body.memberId links registration to an existing profile.
 router.post(
   "/approve/:userId",
   approveUser
 );
 
-// List members or create a profile without a login.
+// Create a financial member profile without requiring a login.
 router
   .route("/")
   .get(getAllMembers)

@@ -4,7 +4,14 @@ const Transaction = require("../models/Transaction");
 const TRANSACTION_TYPES = [
   "CONTRIBUTION",
   "FINE",
+
+  // Current opening savings types.
+  "OPENING_BALANCE",
+  "OPENING_CONTRIBUTION",
+
+  // Read support for legacy records.
   "OPENING_SAVINGS",
+
   "OPENING_FINE",
   "LOAN_DISBURSEMENT",
   "LOAN_REPAYMENT",
@@ -18,6 +25,11 @@ const TRANSACTION_TYPES = [
 
 const roundMoney = (value) =>
   Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+
+// --------------------------------------------------
+// GET TRANSACTIONS
+// Authentication and permissions are enforced by routes.
+// --------------------------------------------------
 
 const getAllTransactions = async (req, res) => {
   try {
@@ -101,6 +113,11 @@ const getAllTransactions = async (req, res) => {
   }
 };
 
+// --------------------------------------------------
+// CASH SUMMARY
+// Cash = all IN entries minus all OUT entries.
+// --------------------------------------------------
+
 const getCashSummary = async (req, res) => {
   try {
     if (!["live", "demo"].includes(req.dataScope)) {
@@ -110,7 +127,6 @@ const getCashSummary = async (req, res) => {
       });
     }
 
-    // Group in MongoDB instead of loading the whole ledger.
     const totals = await Transaction.aggregate([
       {
         $match: {
@@ -130,7 +146,7 @@ const getCashSummary = async (req, res) => {
       },
     ]);
 
-    const byType = {};
+    const byType = Object.create(null);
     let totalIn = 0;
     let totalOut = 0;
 
@@ -163,11 +179,19 @@ const getCashSummary = async (req, res) => {
 
     const net = (type) => byType[type]?.net || 0;
 
+    // Recognize current and legacy opening savings types.
+    // Each actual opening deposit must be recorded only once.
+    const openingSavings = roundMoney(
+      net("OPENING_BALANCE") +
+        net("OPENING_CONTRIBUTION") +
+        net("OPENING_SAVINGS")
+    );
+
     const totalCollectedFines = roundMoney(
       net("OPENING_FINE") + net("FINE")
     );
 
-    // Disbursement is normally OUT; repayment is normally IN.
+    // Disbursement is OUT; repayment is IN.
     // Reverse-direction entries reduce the respective totals.
     const netLoanDisbursed = roundMoney(
       -net("LOAN_DISBURSEMENT")
@@ -180,25 +204,27 @@ const getCashSummary = async (req, res) => {
     return res.status(200).json({
       success: true,
       demoMode: req.user?.isDemo === true,
+
       summary: {
-        // Preserve existing fields.
         totalIn: roundMoney(totalIn),
         totalOut: roundMoney(totalOut),
         availableCash: roundMoney(totalIn - totalOut),
 
-        openingSavings: net("OPENING_SAVINGS"),
+        openingSavings,
         openingFines: net("OPENING_FINE"),
         contributionCollections: net("CONTRIBUTION"),
 
         totalCollectedFines,
 
-        // All seven financial members receive an equal share.
-        // Keep full precision; round only for display/payout.
+        // Original seven-member agreement.
+        // Informational allocation, not an exit payout calculation.
+        // Preserve precision until display or final settlement.
         fineSharePerMember: totalCollectedFines / 7,
         fineShareMemberCount: 7,
 
         netLoanDisbursed,
         netLoanRepaid,
+
         outstandingLoans: roundMoney(
           netLoanDisbursed - netLoanRepaid
         ),

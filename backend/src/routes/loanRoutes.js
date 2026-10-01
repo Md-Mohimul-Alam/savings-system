@@ -10,8 +10,14 @@ const {
   recordLoanRepayment,
 } = require("../controllers/loanController");
 
-// Pass your existing authentication and data-scope middleware.
-// Admin checks are also enforced inside the loan controller.
+const {
+  authorizeRoles,
+} = require("../middleware/roleMiddleware");
+
+const {
+  auditMiddleware,
+} = require("../middleware/auditMiddleware");
+
 const createLoanRouter = ({
   authenticate,
   resolveDataScope,
@@ -29,7 +35,10 @@ const createLoanRouter = ({
 
   router.use(authenticate);
   router.use(resolveDataScope);
+  router.use(auditMiddleware);
 
+  // Active members can see the group loan register.
+  // Members request for themselves; admins can select a member.
   router
     .route("/")
     .get(getAllLoans)
@@ -37,11 +46,31 @@ const createLoanRouter = ({
 
   router.get("/:id", getLoanById);
 
-  router.patch("/:id/approve", approveLoan);
-  router.patch("/:id/reject", rejectLoan);
+  // Approval does not move cash.
+  router.patch(
+    "/:id/approve",
+    authorizeRoles("admin"),
+    approveLoan
+  );
 
-  router.post("/:id/disburse", disburseLoan);
-  router.post("/:id/repayments", recordLoanRepayment);
+  router.patch(
+    "/:id/reject",
+    authorizeRoles("admin"),
+    rejectLoan
+  );
+
+  // Record actual disbursements and repayments.
+  router.post(
+    "/:id/disburse",
+    authorizeRoles("admin"),
+    disburseLoan
+  );
+
+  router.post(
+    "/:id/repayments",
+    authorizeRoles("admin"),
+    recordLoanRepayment
+  );
 
   return router;
 };

@@ -13,6 +13,10 @@ const {
 } = require("../middleware/authMiddleware");
 
 const {
+  dataScopeMiddleware,
+} = require("../middleware/dataScopeMiddleware");
+
+const {
   authorizeRoles,
 } = require("../middleware/roleMiddleware");
 
@@ -23,40 +27,26 @@ const {
 const router = express.Router();
 
 router.use(protect);
+router.use(dataScopeMiddleware);
 router.use(auditMiddleware);
 
-// Member's own contributions
+// Keep /my before /:id.
 router.get(
   "/my",
   getMyContributions
 );
 
-// Admin only
-router.get(
-  "/",
-  authorizeRoles("admin"),
-  getAllContributions
-);
+// All remaining routes require admin access.
+router.use(authorizeRoles("admin"));
 
-// Admin only
-router.get(
-  "/:id",
-  authorizeRoles("admin"),
-  getContributionById
-);
+router
+  .route("/")
+  .get(getAllContributions)
+  .post(addContribution);
 
-// Admin only
-router.post(
-  "/",
-  authorizeRoles("admin"),
-  addContribution
-);
-
-// Admin only
-router.patch(
-  "/:id",
-  authorizeRoles("admin"),
-  updateContribution
-);
+router
+  .route("/:id")
+  .get(getContributionById)
+  .patch(updateContribution);
 
 module.exports = router;

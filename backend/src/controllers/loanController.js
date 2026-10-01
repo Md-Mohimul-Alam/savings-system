@@ -4,7 +4,7 @@ const Loan = require("../models/Loan");
 const Member = require("../models/Member");
 const Transaction = require("../models/Transaction");
 
-// Shared lock serializes loan disbursements within each data scope.
+// Shared with the other financial controllers.
 const cashLockSchema = new mongoose.Schema({
   _id: { type: String },
   version: { type: Number, default: 0 },
@@ -13,6 +13,10 @@ const cashLockSchema = new mongoose.Schema({
 const CashLock =
   mongoose.models.CashLock ||
   mongoose.model("CashLock", cashLockSchema);
+
+// --------------------------------------------------
+// VALIDATION HELPERS
+// --------------------------------------------------
 
 const fail = (message, statusCode = 400) => {
   const error = new Error(message);
@@ -79,9 +83,15 @@ const readDate = (value, label) => {
   return date;
 };
 
+// --------------------------------------------------
+// AUTHORIZATION AND ERROR HANDLING
+// --------------------------------------------------
+
 const handler = (adminOnly, action) => async (req, res) => {
   try {
-    if (!req.user?._id) fail("Authentication required", 401);
+    if (!req.user?._id) {
+      fail("Authentication required", 401);
+    }
 
     if (!["live", "demo"].includes(req.dataScope)) {
       fail("Invalid data scope");
@@ -98,7 +108,9 @@ const handler = (adminOnly, action) => async (req, res) => {
         membershipStatus: "active",
       });
 
-      if (!member) fail("Active membership required", 403);
+      if (!member) {
+        fail("Active membership required", 403);
+      }
 
       req.loanMember = member;
     }
@@ -130,6 +142,10 @@ const handler = (adminOnly, action) => async (req, res) => {
   }
 };
 
+// --------------------------------------------------
+// DATABASE HELPERS
+// --------------------------------------------------
+
 const findLoan = async (req, session) => {
   validateId(req.params.id, "loan ID");
 
@@ -140,13 +156,18 @@ const findLoan = async (req, session) => {
 
   const loan = await (session ? query.session(session) : query);
 
-  if (!loan) fail("Loan not found", 404);
+  if (!loan) {
+    fail("Loan not found", 404);
+  }
 
   return loan;
 };
 
 const populatedLoan = (id, dataScope) =>
-  Loan.findOne({ _id: id, dataScope })
+  Loan.findOne({
+    _id: id,
+    dataScope,
+  })
     .populate({
       path: "member",
       select: "name memberCode user",
@@ -179,14 +200,16 @@ const ensureCashLock = async (dataScope) => {
     );
   } catch (error) {
     // Another request may have created the same lock.
-    if (error.code !== 11000) throw error;
+    if (error.code !== 11000) {
+      throw error;
+    }
   }
 };
 
 // --------------------------------------------------
 // REQUEST LOAN
-// Member: own profile only.
-// Admin: may select a member, including one without login.
+// Members request for themselves.
+// Admins can select an active member without a login.
 // --------------------------------------------------
 
 const createLoanRequest = handler(false, async (req, res) => {
@@ -205,7 +228,9 @@ const createLoanRequest = handler(false, async (req, res) => {
       membershipStatus: "active",
     });
 
-    if (!member) fail("Active member not found", 404);
+    if (!member) {
+      fail("Active member not found", 404);
+    }
   } else {
     member = req.loanMember;
 
@@ -235,11 +260,14 @@ const createLoanRequest = handler(false, async (req, res) => {
 
 // --------------------------------------------------
 // GROUP LOAN REGISTER
-// Visible to all active members and admins.
+// Visible to active members and admins.
 // --------------------------------------------------
 
 const getAllLoans = handler(false, async (req, res) => {
-  const filter = { dataScope: req.dataScope };
+  const filter = {
+    dataScope: req.dataScope,
+  };
+
   const { status, memberId } = req.query;
 
   if (status !== undefined) {
@@ -273,7 +301,10 @@ const getAllLoans = handler(false, async (req, res) => {
         select: "name",
       },
     })
-    .sort({ createdAt: -1, _id: -1 });
+    .sort({
+      createdAt: -1,
+      _id: -1,
+    });
 
   return res.status(200).json({
     success: true,
@@ -282,12 +313,21 @@ const getAllLoans = handler(false, async (req, res) => {
   });
 });
 
+// --------------------------------------------------
+// GET SINGLE LOAN
+// --------------------------------------------------
+
 const getLoanById = handler(false, async (req, res) => {
   validateId(req.params.id, "loan ID");
 
-  const loan = await populatedLoan(req.params.id, req.dataScope);
+  const loan = await populatedLoan(
+    req.params.id,
+    req.dataScope
+  );
 
-  if (!loan) fail("Loan not found", 404);
+  if (!loan) {
+    fail("Loan not found", 404);
+  }
 
   return res.status(200).json({
     success: true,
@@ -296,7 +336,8 @@ const getLoanById = handler(false, async (req, res) => {
 });
 
 // --------------------------------------------------
-// APPROVE LOAN — NO CASH MOVEMENT
+// APPROVE LOAN
+// Approval does not move cash.
 // --------------------------------------------------
 
 const approveLoan = handler(true, async (req, res) => {
@@ -330,7 +371,9 @@ const approveLoan = handler(true, async (req, res) => {
       membershipStatus: "active",
     }).session(session);
 
-    if (!member) fail("Borrower is no longer active", 409);
+    if (!member) {
+      fail("Borrower is no longer active", 409);
+    }
 
     loan.approvedAmount = amount ?? loan.requestedAmount;
     loan.status = "approved";
@@ -354,7 +397,10 @@ const approveLoan = handler(true, async (req, res) => {
 // --------------------------------------------------
 
 const rejectLoan = handler(true, async (req, res) => {
-  const adminNote = readText(req.body?.adminNote, "Admin note");
+  const adminNote = readText(
+    req.body?.adminNote,
+    "Admin note"
+  );
 
   await withTransaction(async (session) => {
     const loan = await findLoan(req, session);
@@ -380,7 +426,7 @@ const rejectLoan = handler(true, async (req, res) => {
 
 // --------------------------------------------------
 // DISBURSE FULL APPROVED AMOUNT
-// Record after the actual cash transfer.
+// Records a cash transfer; does not send money itself.
 // --------------------------------------------------
 
 const disburseLoan = handler(true, async (req, res) => {
@@ -389,8 +435,7 @@ const disburseLoan = handler(true, async (req, res) => {
   await ensureCashLock(req.dataScope);
 
   await withTransaction(async (session) => {
-    // Competing loan disbursements write the same lock.
-    // MongoDB retries a conflicting transaction.
+    // Acquire the shared cash lock before reading cash.
     await CashLock.updateOne(
       { _id: req.dataScope },
       { $inc: { version: 1 } },
@@ -409,7 +454,9 @@ const disburseLoan = handler(true, async (req, res) => {
       membershipStatus: "active",
     }).session(session);
 
-    if (!member) fail("Borrower is no longer active", 409);
+    if (!member) {
+      fail("Borrower is no longer active", 409);
+    }
 
     const now = new Date();
 
@@ -417,11 +464,18 @@ const disburseLoan = handler(true, async (req, res) => {
       loan.repaymentDueDate &&
       loan.repaymentDueDate <= now
     ) {
-      fail("Update the repayment deadline before disbursement", 409);
+      fail(
+        "The repayment deadline has passed; this loan cannot be disbursed",
+        409
+      );
     }
 
     const [cash] = await Transaction.aggregate([
-      { $match: { dataScope: req.dataScope } },
+      {
+        $match: {
+          dataScope: req.dataScope,
+        },
+      },
       {
         $group: {
           _id: null,
@@ -485,6 +539,7 @@ const disburseLoan = handler(true, async (req, res) => {
 // --------------------------------------------------
 // RECORD REPAYMENT
 // amount is this payment, not the cumulative total.
+// Repayments do not increase personal savings.
 // --------------------------------------------------
 
 const recordLoanRepayment = handler(true, async (req, res) => {
@@ -492,7 +547,16 @@ const recordLoanRepayment = handler(true, async (req, res) => {
   const amount = readMoney(body.amount, "Repayment amount");
   const note = readText(body.note, "Note");
 
+  await ensureCashLock(req.dataScope);
+
   await withTransaction(async (session) => {
+    // Use the same lock as other cash-changing operations.
+    await CashLock.updateOne(
+      { _id: req.dataScope },
+      { $inc: { version: 1 } },
+      { session }
+    );
+
     const loan = await findLoan(req, session);
 
     if (loan.status !== "active") {
