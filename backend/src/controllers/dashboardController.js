@@ -4,759 +4,503 @@ const Transaction = require("../models/Transaction");
 const Investment = require("../models/Investment");
 const Expense = require("../models/Expense");
 
+const FINE_SHARE_MEMBERS = 7;
+
+const number = (value) => Number(value || 0);
+
+const roundMoney = (value) =>
+  Math.round((value + Number.EPSILON) * 100) / 100;
+
+const sum = (items, field) =>
+  roundMoney(
+    items.reduce((total, item) => total + number(item[field]), 0)
+  );
+
+// Always use Bangladesh time for monthly deadlines.
+const getCurrentPeriod = () => {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Dhaka",
+    year: "numeric",
+    month: "numeric",
+  }).formatToParts(new Date());
+
+  return {
+    month: Number(parts.find((part) => part.type === "month").value),
+    year: Number(parts.find((part) => part.type === "year").value),
+  };
+};
+
+const fineDeadline = (month, year) =>
+  new Date(Date.UTC(year, month - 1, 15, 18));
+
+// This calculates overdue fines without changing the database.
+const contributionSummary = (item, now) => {
+  const expectedAmount = number(item.expectedAmount);
+  const paidAmount = number(item.paidAmount);
+
+  const remainingAmount = Math.max(
+    0,
+    roundMoney(expectedAmount - paidAmount)
+  );
+
+  let fineAmount = number(item.fineAmount);
+
+  if (
+    remainingAmount > 0 &&
+    now >= fineDeadline(item.month, item.year)
+  ) {
+    fineAmount = 50;
+  }
+
+  const finePaidAmount = number(item.finePaidAmount);
+
+  const remainingFine = Math.max(
+    0,
+    roundMoney(fineAmount - finePaidAmount)
+  );
+
+  return {
+    ...item,
+    expectedAmount,
+    paidAmount,
+    fineAmount,
+    finePaidAmount,
+    remainingAmount,
+    remainingFine,
+    totalDue: roundMoney(remainingAmount + remainingFine),
+    status:
+      paidAmount >= expectedAmount
+        ? "paid"
+        : paidAmount > 0
+          ? "partial"
+          : "due",
+  };
+};
+
+const getMonthRecord = (member, contributions, period, now) => {
+  const existing = contributions.find(
+    (item) =>
+      String(item.member) === String(member._id) &&
+      number(item.month) === period.month &&
+      number(item.year) === period.year
+  );
+
+  return contributionSummary(
+    existing || {
+      member: member._id,
+      month: period.month,
+      year: period.year,
+      expectedAmount: number(member.monthlyContribution),
+      paidAmount: 0,
+      fineAmount: 0,
+      finePaidAmount: 0,
+    },
+    now
+  );
+};
+
+const ledgerSummary = (transactions) => {
+  let totalIn = 0;
+  let totalOut = 0;
+
+  const netByType = {};
+
+  for (const transaction of transactions) {
+    const amount = number(transaction.amount);
+    const signed =
+      transaction.direction === "IN" ? amount : -amount;
+
+    if (transaction.direction === "IN") totalIn += amount;
+    if (transaction.direction === "OUT") totalOut += amount;
+
+    netByType[transaction.type] =
+      (netByType[transaction.type] || 0) + signed;
+  }
+
+  const totalCollectedFines = roundMoney(
+    (netByType.OPENING_FINE || 0) +
+      (netByType.FINE || 0)
+  );
+
+  const totalLoanDisbursed = roundMoney(
+    -(netByType.LOAN_DISBURSEMENT || 0)
+  );
+
+  const totalLoanRepaid = roundMoney(
+    netByType.LOAN_REPAYMENT || 0
+  );
+
+  return {
+    totalIn: roundMoney(totalIn),
+    totalOut: roundMoney(totalOut),
+    availableCash: roundMoney(totalIn - totalOut),
+    totalCollectedFines,
+    fineSharePerMember: totalCollectedFines / FINE_SHARE_MEMBERS,
+    fineShareMemberCount: FINE_SHARE_MEMBERS,
+    totalLoanDisbursed,
+    totalLoanRepaid,
+    outstandingLoans: roundMoney(
+      totalLoanDisbursed - totalLoanRepaid
+    ),
+  };
+};
+
+const monthlySavingsChart = (contributions) => {
+  const totals = {};
+
+  for (const item of contributions) {
+    const key = `${item.year}-${String(item.month).padStart(2, "0")}`;
+
+    totals[key] = (totals[key] || 0) + number(item.paidAmount);
+  }
+
+  return Object.entries(totals)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([month, amount]) => ({
+      month,
+      amount: roundMoney(amount),
+    }));
+};
+
+const loadData = async (dataScope) => {
+  const [
+    members,
+    contributions,
+    transactions,
+    investments,
+    expenses,
+  ] = await Promise.all([
+    Member.find({ dataScope })
+      .populate("user", "name email")
+      .lean(),
+
+    Contribution.find({ dataScope }).lean(),
+
+    Transaction.find({ dataScope })
+      .select("type direction amount member")
+      .lean(),
+
+    Investment.find({ dataScope }).lean(),
+
+    Expense.find({ dataScope }).lean(),
+  ]);
+
+  return {
+    members,
+    contributions,
+    transactions,
+    investments,
+    expenses,
+  };
+};
+
 // --------------------------------------------------
 // ADMIN DASHBOARD
 // --------------------------------------------------
 
-const getAdminDashboard = async (
-  req,
-  res
-) => {
-  try {
-    const now = new Date();
+const getAdminDashboard = async (req, res) => {
+  const data = await loadData(req.dataScope);
+  const now = new Date();
+  const period = getCurrentPeriod();
 
-    const currentMonth =
-      now.getMonth() + 1;
+  const activeMembers = data.members.filter(
+    (member) => member.membershipStatus === "active"
+  );
 
-    const currentYear =
-      now.getFullYear();
+  const currentRecords = activeMembers.map((member) =>
+    getMonthRecord(member, data.contributions, period, now)
+  );
 
-    const [
-      members,
-      contributions,
-      transactions,
-      investments,
-      expenses,
-    ] = await Promise.all([
-      Member.find({
-        membershipStatus: "active",
-        dataScope: req.dataScope,
-      }).lean(),
+  const ledger = ledgerSummary(data.transactions);
 
-      Contribution.find({ dataScope: req.dataScope }).lean(),
+  // Member totals include imported opening savings.
+  // Do not add openingContribution again.
+  const totalSavings = sum(data.members, "totalContribution");
 
-      Transaction.find({ dataScope: req.dataScope }).lean(),
+  const totalInvested = sum(data.investments, "investedAmount");
+  const totalInvestmentValue = sum(
+    data.investments,
+    "currentValue"
+  );
 
-      Investment.find({ dataScope: req.dataScope }).lean(),
+  const assessedRecords = data.contributions.map((item) =>
+    contributionSummary(item, now)
+  );
 
-      Expense.find({ dataScope: req.dataScope }).lean(),
-    ]);
+  const investmentPerformance = data.investments.map(
+    (investment) => {
+      const investedAmount = number(investment.investedAmount);
+      const currentValue = number(investment.currentValue);
+      const profitLoss = roundMoney(currentValue - investedAmount);
 
-    const totalMembers =
-      members.length;
+      return {
+        id: investment._id,
+        name: investment.name,
+        investedAmount,
+        currentValue,
+        profitLoss,
+        roi:
+          investedAmount > 0
+            ? (profitLoss / investedAmount) * 100
+            : 0,
+        status: investment.status,
+      };
+    }
+  );
 
-    const totalSavings =
-      contributions.reduce(
-        (sum, item) =>
-          sum +
-          Number(
-            item.paidAmount || 0
-          ),
-        0
-      );
+  return res.status(200).json({
+    success: true,
+    role: "admin",
+    demoMode: req.user?.isDemo === true,
 
-    const totalIn =
-      transactions
-        .filter(
-          (item) =>
-            item.direction === "IN"
-        )
-        .reduce(
-          (sum, item) =>
-            sum +
-            Number(
-              item.amount || 0
-            ),
-          0
-        );
+    summary: {
+      totalMembers: activeMembers.length,
+      totalFinancialProfiles: data.members.length,
+      registeredMembers: activeMembers.filter(
+        (member) => member.user
+      ).length,
+      unregisteredMembers: activeMembers.filter(
+        (member) => !member.user
+      ).length,
 
-    const totalOut =
-      transactions
-        .filter(
-          (item) =>
-            item.direction === "OUT"
-        )
-        .reduce(
-          (sum, item) =>
-            sum +
-            Number(
-              item.amount || 0
-            ),
-          0
-        );
+      totalSavings,
+      openingSavings: sum(data.members, "openingContribution"),
 
-    const availableCash =
-      totalIn - totalOut;
+      ...ledger,
 
-    const totalInvested =
-      investments.reduce(
-        (sum, item) =>
-          sum +
-          Number(
-            item.investedAmount || 0
-          ),
-        0
-      );
+      totalInvested,
+      totalInvestmentValue,
+      totalProfitLoss: roundMoney(
+        totalInvestmentValue - totalInvested
+      ),
+      totalExpenses: sum(data.expenses, "amount"),
 
-    const totalInvestmentValue =
-      investments.reduce(
-        (sum, item) =>
-          sum +
-          Number(
-            item.currentValue || 0
-          ),
-        0
-      );
+      // Existing monthly records only.
+      outstandingRecordedContributions: sum(
+        assessedRecords,
+        "remainingAmount"
+      ),
+      outstandingRecordedFines: sum(
+        assessedRecords,
+        "remainingFine"
+      ),
+    },
 
-    const totalProfitLoss =
-      totalInvestmentValue -
-      totalInvested;
+    currentMonth: {
+      ...period,
+      expectedAmount: sum(currentRecords, "expectedAmount"),
+      collectedAmount: sum(currentRecords, "paidAmount"),
+      outstandingAmount: sum(currentRecords, "remainingAmount"),
 
-    const totalExpenses =
-      expenses.reduce(
-        (sum, item) =>
-          sum +
-          Number(
-            item.amount || 0
-          ),
-        0
-      );
+      collectedFines: sum(currentRecords, "finePaidAmount"),
+      outstandingFines: sum(currentRecords, "remainingFine"),
+      totalDue: sum(currentRecords, "totalDue"),
 
-    const currentMonthContributions =
-      contributions.filter(
-        (item) =>
-          Number(item.month) ===
-            currentMonth &&
-          Number(item.year) ===
-            currentYear
-      );
+      paidMembers: currentRecords.filter(
+        (item) => item.status === "paid"
+      ).length,
+      partialMembers: currentRecords.filter(
+        (item) => item.status === "partial"
+      ).length,
+      dueMembers: currentRecords.filter(
+        (item) => item.status === "due"
+      ).length,
+    },
 
-    const expectedAmount =
-      members.reduce(
-        (sum, member) =>
-          sum +
-          Number(
-            member.monthlyContribution ||
-              0
-          ),
-        0
-      );
-
-    const collectedAmount =
-      currentMonthContributions.reduce(
-        (sum, item) =>
-          sum +
-          Number(
-            item.paidAmount || 0
-          ),
-        0
-      );
-
-    const outstandingAmount =
-      Math.max(
-        expectedAmount -
-          collectedAmount,
-        0
-      );
-
-    const paidMembers =
-      currentMonthContributions.filter(
-        (item) =>
-          item.status === "paid"
-      ).length;
-
-    const partialMembers =
-      currentMonthContributions.filter(
-        (item) =>
-          item.status === "partial"
-      ).length;
-
-    const dueMembers =
-      Math.max(
-        totalMembers -
-          paidMembers -
-          partialMembers,
-        0
-      );
-
-    const monthlySavingsMap = {};
-
-    contributions.forEach(
-      (item) => {
-        const key = `${item.year}-${String(
-          item.month
-        ).padStart(2, "0")}`;
-
-        if (
-          !monthlySavingsMap[key]
-        ) {
-          monthlySavingsMap[key] =
-            0;
-        }
-
-        monthlySavingsMap[key] +=
-          Number(
-            item.paidAmount || 0
-          );
-      }
-    );
-
-    const monthlySavings =
-      Object.entries(
-        monthlySavingsMap
-      )
-        .sort(
-          ([a], [b]) =>
-            a.localeCompare(b)
-        )
-        .map(
-          ([month, amount]) => ({
-            month,
-            amount,
-          })
-        );
-
-    const investmentPerformance =
-      investments.map(
-        (investment) => {
-          const investedAmount =
-            Number(
-              investment.investedAmount ||
-                0
-            );
-
-          const currentValue =
-            Number(
-              investment.currentValue ||
-                0
-            );
-
-          const profitLoss =
-            currentValue -
-            investedAmount;
-
-          const roi =
-            investedAmount > 0
-              ? (profitLoss /
-                  investedAmount) *
-                100
-              : 0;
-
-          return {
-            id:
-              investment._id,
-
-            name:
-              investment.name,
-
-            investedAmount,
-
-            currentValue,
-
-            profitLoss,
-
-            roi,
-
-            status:
-              investment.status,
-          };
-        }
-      );
-
-    return res.status(200).json({
-      success: true,
-      role: "admin",
-      demoMode: req.user?.isDemo === true,
-
-      summary: {
-        totalMembers,
-        totalSavings,
-        availableCash,
-        totalInvested,
-        totalInvestmentValue,
-        totalProfitLoss,
-        totalExpenses,
-      },
-
-      currentMonth: {
-        month: currentMonth,
-        year: currentYear,
-        expectedAmount,
-        collectedAmount,
-        outstandingAmount,
-        paidMembers,
-        partialMembers,
-        dueMembers,
-      },
-
-      charts: {
-        monthlySavings,
-        investmentPerformance,
-      },
-    });
-  } catch (error) {
-    console.error(
-      "Admin dashboard error:",
-      {
-        name:
-          error?.name,
-
-        message:
-          error?.message,
-
-        stack:
-          error?.stack,
-      }
-    );
-
-    return res.status(500).json({
-      success: false,
-
-      message:
-        error?.message ||
-        "Failed to load dashboard",
-
-      errorName:
-        error?.name ||
-        "UnknownError",
-    });
-  }
+    charts: {
+      monthlySavings: monthlySavingsChart(data.contributions),
+      investmentPerformance,
+    },
+  });
 };
 
 // --------------------------------------------------
 // MEMBER DASHBOARD
 // --------------------------------------------------
 
-const getMemberDashboard = async (
-  req,
-  res
-) => {
-  try {
-    console.log(
-      "Loading member dashboard for user:",
-      req.user?._id
-    );
+const getMemberDashboard = async (req, res) => {
+  const data = await loadData(req.dataScope);
 
-    if (!req.user?._id) {
-      return res.status(401).json({
-        success: false,
+  const member = data.members.find(
+    (item) =>
+      item.user &&
+      String(item.user._id) === String(req.user._id)
+  );
 
-        message:
-          "Authentication required",
-      });
-    }
-
-    // -----------------------------------
-    // Find member profile
-    // -----------------------------------
-
-    const member =
-      await Member.findOne({
-        user: req.user._id,
-        dataScope: req.dataScope,
-      })
-        .populate(
-          "user",
-          "name email"
-        )
-        .lean();
-
-    if (!member) {
-      return res.status(404).json({
-        success: false,
-
-        message:
-          "Member profile not found. Please contact admin.",
-      });
-    }
-
-    console.log(
-      "Member found:",
-      String(member._id)
-    );
-
-    const now = new Date();
-
-    const currentMonth =
-      now.getMonth() + 1;
-
-    const currentYear =
-      now.getFullYear();
-
-    // -----------------------------------
-    // Load member + organization data
-    // -----------------------------------
-
-    const [
-      contributions,
-      investments,
-      allContributions,
-      expenses,
-    ] = await Promise.all([
-      // Current member contributions
-      Contribution.find({
-        member: member._id,
-        dataScope: req.dataScope,
-      })
-        .sort({
-          year: 1,
-          month: 1,
-        })
-        .lean(),
-
-      // Active investments
-      Investment.find({
-        status: "active",
-        dataScope: req.dataScope,
-      })
-        .select(
-          "name investedAmount currentValue status"
-        )
-        .lean(),
-
-      // All contributions
-      Contribution.find({ dataScope: req.dataScope })
-        .select(
-          "paidAmount"
-        )
-        .lean(),
-
-      // All expenses
-      Expense.find({ dataScope: req.dataScope })
-        .select(
-          "amount"
-        )
-        .lean(),
-    ]);
-
-    console.log(
-      "Member contributions:",
-      contributions.length
-    );
-
-    console.log(
-      "Active investments:",
-      investments.length
-    );
-
-    console.log(
-      "All contributions:",
-      allContributions.length
-    );
-
-    console.log(
-      "Expenses:",
-      expenses.length
-    );
-
-    // -----------------------------------
-    // Member contribution calculations
-    // -----------------------------------
-
-    const totalContribution =
-      contributions.reduce(
-        (sum, item) =>
-          sum +
-          Number(
-            item.paidAmount || 0
-          ),
-        0
-      );
-
-    const expectedContribution =
-      contributions.reduce(
-        (sum, item) =>
-          sum +
-          Number(
-            item.expectedAmount || 0
-          ),
-        0
-      );
-
-    const outstandingContribution =
-      Math.max(
-        expectedContribution -
-          totalContribution,
-        0
-      );
-
-    const currentContribution =
-      contributions.find(
-        (item) =>
-          Number(item.month) ===
-            currentMonth &&
-          Number(item.year) ===
-            currentYear
-      );
-
-    // -----------------------------------
-    // Organization totals
-    // -----------------------------------
-
-    const totalGroupSavings =
-      allContributions.reduce(
-        (sum, item) =>
-          sum +
-          Number(
-            item.paidAmount || 0
-          ),
-        0
-      );
-
-    const totalExpenses =
-      expenses.reduce(
-        (sum, item) =>
-          sum +
-          Number(
-            item.amount || 0
-          ),
-        0
-      );
-
-    // -----------------------------------
-    // Ownership - scoped to the current data set
-    // -----------------------------------
-
-    const ownershipPercentage =
-      totalGroupSavings > 0
-        ? Number(
-            (
-              (totalContribution /
-                totalGroupSavings) *
-              100
-            ).toFixed(4)
-          )
-        : 0;
-
-    // -----------------------------------
-    // Investment share
-    // -----------------------------------
-
-    const totalInvestmentShare =
-      investments.reduce(
-        (
-          sum,
-          investment
-        ) => {
-          const currentValue =
-            Number(
-              investment.currentValue ||
-                0
-            );
-
-          const share =
-            (currentValue *
-              ownershipPercentage) /
-            100;
-
-          return sum + share;
-        },
-        0
-      );
-
-    // -----------------------------------
-    // Member savings chart
-    // -----------------------------------
-
-    const monthlySavings =
-      contributions.map(
-        (item) => ({
-          month: `${item.year}-${String(
-            item.month
-          ).padStart(2, "0")}`,
-
-          amount: Number(
-            item.paidAmount || 0
-          ),
-        })
-      );
-
-    // -----------------------------------
-    // Response
-    // -----------------------------------
-
-    return res.status(200).json({
-      success: true,
-
-      role: "member",
-      demoMode: req.user?.isDemo === true,
-
-      member: {
-        memberCode:
-          member.memberCode ||
-          "",
-
-        name:
-          member.user?.name ||
-          "Member",
-
-        monthlyContribution:
-          Number(
-            member.monthlyContribution ||
-              0
-          ),
-
-        membershipStatus:
-          member.membershipStatus ||
-          "active",
-      },
-
-      summary: {
-        totalContribution,
-
-        expectedContribution,
-
-        outstandingContribution,
-
-        ownershipPercentage,
-
-        totalInvestmentShare,
-
-        totalGroupSavings,
-
-        totalExpenses,
-      },
-
-      currentMonth: {
-        month:
-          currentMonth,
-
-        year:
-          currentYear,
-
-        expectedAmount:
-          Number(
-            member.monthlyContribution ||
-              0
-          ),
-
-        paidAmount:
-          Number(
-            currentContribution
-              ?.paidAmount ||
-              0
-          ),
-
-        status:
-          currentContribution
-            ?.status ||
-          "due",
-      },
-
-      charts: {
-        monthlySavings,
-      },
-    });
-  } catch (error) {
-    console.error(
-      "MEMBER DASHBOARD FATAL ERROR:",
-      {
-        name:
-          error?.name,
-
-        message:
-          error?.message,
-
-        stack:
-          error?.stack,
-
-        userId:
-          req.user?._id,
-      }
-    );
-
-    return res.status(500).json({
+  if (!member) {
+    return res.status(404).json({
       success: false,
-
-      message:
-        error?.message ||
-        "Failed to load dashboard",
-
-      errorName:
-        error?.name ||
-        "UnknownError",
+      message: "Member profile not found. Please contact admin.",
     });
   }
+
+  const now = new Date();
+  const period = getCurrentPeriod();
+
+  const contributions = data.contributions.filter(
+    (item) => String(item.member) === String(member._id)
+  );
+
+  const assessedRecords = contributions.map((item) =>
+    contributionSummary(item, now)
+  );
+
+  const currentContribution = getMonthRecord(
+    member,
+    contributions,
+    period,
+    now
+  );
+
+  const currentMonthExists = contributions.some(
+    (item) =>
+      number(item.month) === period.month &&
+      number(item.year) === period.year
+  );
+
+  // Include current-month dues even before its record is generated.
+  // Past missing months must be created by migration/monthly generation.
+  const dueRecords =
+    !currentMonthExists &&
+    member.membershipStatus === "active"
+      ? [...assessedRecords, currentContribution]
+      : assessedRecords;
+
+  const ledger = ledgerSummary(data.transactions);
+
+  const personalLedger = ledgerSummary(
+    data.transactions.filter(
+      (item) => String(item.member) === String(member._id)
+    )
+  );
+
+  const totalContribution = number(member.totalContribution);
+  const totalGroupSavings = sum(
+    data.members,
+    "totalContribution"
+  );
+
+  const ownershipRatio =
+    totalGroupSavings > 0
+      ? totalContribution / totalGroupSavings
+      : 0;
+
+  const activeInvestments = data.investments.filter(
+    (investment) => investment.status === "active"
+  );
+
+  const totalInvestmentShare = roundMoney(
+    activeInvestments.reduce(
+      (total, investment) =>
+        total + number(investment.currentValue) * ownershipRatio,
+      0
+    )
+  );
+
+  return res.status(200).json({
+    success: true,
+    role: "member",
+    demoMode: req.user?.isDemo === true,
+
+    member: {
+      memberCode: member.memberCode || "",
+      name: member.name || member.user?.name || "Member",
+      monthlyContribution: number(member.monthlyContribution),
+      membershipStatus: member.membershipStatus,
+    },
+
+    summary: {
+      totalContribution,
+      openingContribution: number(member.openingContribution),
+
+      expectedContribution: roundMoney(
+        number(member.openingContribution) +
+          sum(dueRecords, "expectedAmount")
+      ),
+
+      outstandingContribution: sum(
+        dueRecords,
+        "remainingAmount"
+      ),
+      outstandingFines: sum(dueRecords, "remainingFine"),
+
+      ownershipPercentage: Number(
+        (ownershipRatio * 100).toFixed(4)
+      ),
+      totalInvestmentShare,
+      totalGroupSavings,
+      totalExpenses: sum(data.expenses, "amount"),
+
+      availableCash: ledger.availableCash,
+      totalCollectedFines: ledger.totalCollectedFines,
+      fineShare: ledger.fineSharePerMember,
+
+      // Informational total, not an exit payout quotation.
+      savingsIncludingFineShare:
+        totalContribution + ledger.fineSharePerMember,
+
+      outstandingLoan: personalLedger.outstandingLoans,
+      totalLoanDisbursed: personalLedger.totalLoanDisbursed,
+      totalLoanRepaid: personalLedger.totalLoanRepaid,
+      groupOutstandingLoans: ledger.outstandingLoans,
+    },
+
+    currentMonth: {
+      ...period,
+      expectedAmount: currentContribution.expectedAmount,
+      paidAmount: currentContribution.paidAmount,
+      status: currentContribution.status,
+      remainingAmount: currentContribution.remainingAmount,
+      fineAmount: currentContribution.fineAmount,
+      finePaidAmount: currentContribution.finePaidAmount,
+      remainingFine: currentContribution.remainingFine,
+      totalDue: currentContribution.totalDue,
+    },
+
+    charts: {
+      monthlySavings: monthlySavingsChart(contributions),
+    },
+  });
 };
 
 // --------------------------------------------------
 // ROLE-BASED DASHBOARD
 // --------------------------------------------------
 
-const getDashboardSummary = async (
-  req,
-  res
-) => {
+const getDashboardSummary = async (req, res) => {
   try {
-    if (!req.user) {
+    if (!req.user?._id) {
       return res.status(401).json({
         success: false,
-
-        message:
-          "Authentication required",
+        message: "Authentication required",
       });
     }
 
-    console.log(
-      "Dashboard request:",
-      {
-        userId:
-          req.user?._id,
-
-        role:
-          req.user?.role,
-      }
-    );
-
-    if (
-      req.user.role === "admin"
-    ) {
-      return getAdminDashboard(
-        req,
-        res
-      );
+    if (!["live", "demo"].includes(req.dataScope)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid data scope",
+      });
     }
 
-    if (
-      req.user.role === "member"
-    ) {
-      return getMemberDashboard(
-        req,
-        res
-      );
+    if (req.user.role === "admin") {
+      return await getAdminDashboard(req, res);
+    }
+
+    if (req.user.role === "member") {
+      return await getMemberDashboard(req, res);
     }
 
     return res.status(403).json({
       success: false,
-
-      message:
-        "Invalid user role",
+      message: "Invalid user role",
     });
   } catch (error) {
-    console.error(
-      "Dashboard routing error:",
-      {
-        name:
-          error?.name,
-
-        message:
-          error?.message,
-
-        stack:
-          error?.stack,
-      }
-    );
+    console.error("Dashboard error:", error);
 
     return res.status(500).json({
       success: false,
-
-      message:
-        error?.message ||
-        "Failed to load dashboard",
-
-      errorName:
-        error?.name ||
-        "UnknownError",
+      message: "Failed to load dashboard",
     });
   }
 };

@@ -1,6 +1,7 @@
 const express = require("express");
 
 const {
+  createMember,
   getAllMembers,
   getMemberById,
   getMyMemberProfile,
@@ -16,6 +17,10 @@ const {
 } = require("../middleware/authMiddleware");
 
 const {
+  dataScopeMiddleware,
+} = require("../middleware/dataScopeMiddleware");
+
+const {
   authorizeRoles,
 } = require("../middleware/roleMiddleware");
 
@@ -25,78 +30,54 @@ const {
 
 const router = express.Router();
 
-// --------------------------------------------------
-// AUTHENTICATION
-// --------------------------------------------------
-
+// Authentication must run before data-scope resolution.
 router.use(protect);
+router.use(dataScopeMiddleware);
 router.use(auditMiddleware);
 
 // --------------------------------------------------
-// LOGGED-IN MEMBER
+// OWN PROFILE
 // --------------------------------------------------
 
-// Get own profile
 router.get(
   "/me/profile",
   getMyMemberProfile
 );
 
-// Update own personal information
-// Editable:
-// - phone
-// - address
-// - nidNumber
-// - passportNumber
 router.patch(
   "/me/profile",
   updateMyMemberProfile
 );
 
 // --------------------------------------------------
-// ADMIN ONLY
+// ADMIN ROUTES
 // --------------------------------------------------
 
-// Get pending users
+router.use(authorizeRoles("admin"));
+
+// Keep specific paths before /:id.
 router.get(
   "/pending",
-  authorizeRoles("admin"),
   getPendingUsers
 );
 
-// Get all members
-router.get(
-  "/",
-  authorizeRoles("admin"),
-  getAllMembers
-);
-
-// Approve user and create member profile
+// Approve registration.
+// Supply body.memberId to link an existing profile.
 router.post(
   "/approve/:userId",
-  authorizeRoles("admin"),
   approveUser
 );
 
-// Get one member
-router.get(
-  "/:id",
-  authorizeRoles("admin"),
-  getMemberById
-);
+// List members or create a profile without a login.
+router
+  .route("/")
+  .get(getAllMembers)
+  .post(createMember);
 
-// Update one member
-router.patch(
-  "/:id",
-  authorizeRoles("admin"),
-  updateMember
-);
-
-// Delete one member
-router.delete(
-  "/:id",
-  authorizeRoles("admin"),
-  deleteMember
-);
+router
+  .route("/:id")
+  .get(getMemberById)
+  .patch(updateMember)
+  .delete(deleteMember);
 
 module.exports = router;
