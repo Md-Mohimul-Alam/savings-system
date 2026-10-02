@@ -82,6 +82,7 @@ const adminMenu: MenuItem[] =
       href:
         "/dashboard/transactions",
     },
+    { name: "Loans", href: "/dashboard/loans" },
 
     {
       name:
@@ -173,6 +174,7 @@ const memberMenu: MenuItem[] =
       href:
         "/dashboard/my-contributions",
     },
+    { name: "Loans", href: "/dashboard/loans" },
 
     {
       name:
@@ -212,6 +214,15 @@ export default function Sidebar({
 
   const router =
     useRouter();
+
+  useEffect(() => {
+    if (!open) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [open, onClose]);
 
   const [
     user,
@@ -312,11 +323,10 @@ export default function Sidebar({
     user?.role ===
     "admin"
       ? adminMenu
-      : memberMenu;
+      : user?.role === "member" ? memberMenu : [];
 
   const isDemo =
-    user?.isDemo ===
-    true;
+    user?.isDemo === true || user?.dataScope === "demo";
 
   // --------------------------------------------------
   // LOGOUT
@@ -500,6 +510,7 @@ export default function Sidebar({
                   href={
                     item.href
                   }
+                  aria-current={active ? "page" : undefined}
                   onClick={
                     onClose
                   }

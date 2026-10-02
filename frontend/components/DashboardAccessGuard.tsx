@@ -1,208 +1,55 @@
 "use client";
 
-import {
-  ReactNode,
-  useEffect,
-  useState,
-} from "react";
+import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { clearAuthSession, getStoredUser } from "@/services/demoMode";
 
-import {
-  usePathname,
-  useRouter,
-} from "next/navigation";
+const adminOnlyRoutes = [
+  "/dashboard/members", "/dashboard/contributions", "/dashboard/transactions",
+  "/dashboard/expenses", "/dashboard/ownership", "/dashboard/profits",
+  "/dashboard/join-requests", "/dashboard/exit-requests", "/dashboard/reports",
+  "/dashboard/audit-logs",
+];
+const memberOnlyRoutes = [
+  "/dashboard/profile", "/dashboard/my-contributions",
+  "/dashboard/my-ownership", "/dashboard/my-exit-request",
+];
+const matches = (pathname: string, route: string) =>
+  pathname === route || pathname.startsWith(`${route}/`);
 
-interface User {
-  id: string;
-  name: string;
-  email: string;
-
-  role:
-    | "admin"
-    | "member";
-
-  status: string;
-
-  isDemo?: boolean;
-
-  dataScope?:
-    | "live"
-    | "demo";
-}
-
-// --------------------------------------------------
-// ADMIN ONLY ROUTES
-// --------------------------------------------------
-
-const adminOnlyRoutes =
-  [
-    "/dashboard/members",
-    "/dashboard/contributions",
-    "/dashboard/transactions",
-    "/dashboard/expenses",
-    "/dashboard/ownership",
-    "/dashboard/profits",
-    "/dashboard/join-requests",
-    "/dashboard/exit-requests",
-    "/dashboard/reports",
-    "/dashboard/audit-logs",
-  ];
-
-// --------------------------------------------------
-// MEMBER ONLY ROUTES
-// --------------------------------------------------
-
-const memberOnlyRoutes =
-  [
-    "/dashboard/profile",
-    "/dashboard/my-contributions",
-    "/dashboard/my-ownership",
-    "/dashboard/my-exit-request",
-  ];
-
-export default function DashboardAccessGuard({
-  children,
-}: {
-  children: ReactNode;
-}) {
-  const pathname =
-    usePathname();
-
-  const router =
-    useRouter();
-
-  const [
-    checking,
-    setChecking,
-  ] =
-    useState(true);
+// /dashboard/loans is deliberately shared by admins and members.
+// This is a UI guard. Backend authorization remains authoritative.
+export default function DashboardAccessGuard({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const [approvedPath, setApprovedPath] = useState<string | null>(null);
 
   useEffect(() => {
-    const savedUser =
-      localStorage.getItem(
-        "user"
-      );
-
-    if (!savedUser) {
-      localStorage.removeItem(
-        "token"
-      );
-
-      localStorage.removeItem(
-        "isDemo"
-      );
-
-      router.replace(
-        "/login"
-      );
-
+    setApprovedPath(null);
+    const user = getStoredUser();
+    if (!localStorage.getItem("token") || !user ||
+        !["admin", "member"].includes(user.role || "") || user.status !== "active") {
+      clearAuthSession();
+      router.replace("/login");
       return;
     }
-
-    try {
-      const user: User =
-        JSON.parse(
-          savedUser
-        );
-
-      const isAdminOnlyRoute =
-        adminOnlyRoutes.some(
-          (
-            route
-          ) =>
-            pathname ===
-              route ||
-            pathname.startsWith(
-              `${route}/`
-            )
-        );
-
-      const isMemberOnlyRoute =
-        memberOnlyRoutes.some(
-          (
-            route
-          ) =>
-            pathname ===
-              route ||
-            pathname.startsWith(
-              `${route}/`
-            )
-        );
-
-      // Non-admin cannot access admin pages
-      if (
-        user.role !==
-          "admin" &&
-        isAdminOnlyRoute
-      ) {
-        router.replace(
-          "/dashboard"
-        );
-
-        return;
-      }
-
-      // Admin / Demo Admin cannot access member-only pages
-      if (
-        user.role ===
-          "admin" &&
-        isMemberOnlyRoute
-      ) {
-        router.replace(
-          "/dashboard"
-        );
-
-        return;
-      }
-
-      setChecking(
-        false
-      );
-    } catch (
-      error
-    ) {
-      console.error(
-        "Dashboard access check failed:",
-        error
-      );
-
-      localStorage.removeItem(
-        "token"
-      );
-
-      localStorage.removeItem(
-        "user"
-      );
-
-      localStorage.removeItem(
-        "isDemo"
-      );
-
-      router.replace(
-        "/login"
-      );
+    const forbidden =
+      (user.role !== "admin" && adminOnlyRoutes.some((route) => matches(pathname, route))) ||
+      (user.role !== "member" && memberOnlyRoutes.some((route) => matches(pathname, route)));
+    if (forbidden) {
+      router.replace("/dashboard");
+      return;
     }
-  }, [
-    pathname,
-    router,
-  ]);
+    setApprovedPath(pathname);
+  }, [pathname, router]);
 
-  if (checking) {
-    return (
-      <div className="flex min-h-[50vh] items-center justify-center">
-        <div className="text-center">
-          <div className="mx-auto h-7 w-7 animate-spin rounded-full border-4 border-gray-200 border-t-emerald-600" />
-
-          <p className="mt-3 text-sm text-gray-500">
-            Checking access...
-          </p>
-        </div>
-      </div>
-    );
+  // A previous successful check cannot authorize a newly navigated path.
+  if (approvedPath !== pathname) {
+    return <div role="status" className="flex min-h-[50vh] items-center justify-center text-gray-500">
+      Checking access…
+    </div>;
   }
-
-  return (
-    <>
-      {children}
-    </>
-  );
+  return <>{children}</>;
 }
+

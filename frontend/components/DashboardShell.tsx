@@ -3,11 +3,11 @@
 import Link from "next/link";
 
 import {
-  ReactNode,
   useEffect,
   useRef,
   useState,
 } from "react";
+import type { ReactNode } from "react";
 
 import {
   useRouter,
@@ -175,12 +175,21 @@ export default function DashboardShell({
         }
       };
 
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setProfileOpen(false);
+        setSidebarOpen(false);
+      }
+    };
+    document.addEventListener("keydown", handleEscape);
+
     document.addEventListener(
       "mousedown",
       handleClickOutside
     );
 
     return () => {
+      document.removeEventListener("keydown", handleEscape);
       document.removeEventListener(
         "mousedown",
         handleClickOutside
@@ -216,8 +225,7 @@ export default function DashboardShell({
   // --------------------------------------------------
 
   const isDemo =
-    user?.isDemo ===
-    true;
+    user?.isDemo === true || user?.dataScope === "demo";
 
   const initials =
     user?.name
@@ -270,6 +278,7 @@ export default function DashboardShell({
               }
               className="mr-3 rounded-lg border border-gray-200 px-3 py-2 text-xl text-gray-700 transition hover:bg-gray-50 lg:hidden"
               aria-label="Open sidebar"
+              aria-expanded={sidebarOpen}
             >
               ☰
             </button>
@@ -323,6 +332,8 @@ export default function DashboardShell({
             >
               <button
                 type="button"
+                aria-label="Account options"
+                aria-expanded={profileOpen}
                 onClick={() =>
                   setProfileOpen(
                     (
@@ -392,6 +403,10 @@ export default function DashboardShell({
                   </div>
 
                   <div className="p-2">
+                    <Link href="/dashboard/loans" onClick={() => setProfileOpen(false)}
+                      className="block rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                      Group Loans
+                    </Link>
                     {user?.role ===
                       "member" && (
                       <Link

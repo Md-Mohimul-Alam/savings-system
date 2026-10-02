@@ -6,6 +6,7 @@ import {
   CartesianGrid,
   Line,
   LineChart,
+  Legend,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -28,16 +29,22 @@ interface InvestmentPerformance {
 }
 
 interface DashboardChartsProps {
-  monthlySavings: MonthlySaving[];
-  investmentPerformance?: InvestmentPerformance[];
+  monthlySavings?: MonthlySaving[] | null;
+  investmentPerformance?: InvestmentPerformance[] | null;
   showInvestmentChart?: boolean;
 }
 
 export default function DashboardCharts({
-  monthlySavings,
-  investmentPerformance = [],
+  monthlySavings: savingsInput,
+  investmentPerformance: investmentInput,
   showInvestmentChart = true,
 }: DashboardChartsProps) {
+  const monthlySavings = (savingsInput ?? []).filter(
+    (item) => Number.isFinite(item.amount)
+  );
+  const investmentPerformance = (investmentInput ?? []).filter(
+    (item) => Number.isFinite(item.investedAmount) && Number.isFinite(item.currentValue)
+  );
   return (
     <div
       className={`mt-8 grid gap-6 ${
@@ -53,7 +60,7 @@ export default function DashboardCharts({
           </h2>
 
           <p className="mt-1 text-sm text-gray-500">
-            Savings contribution history over time.
+            Monthly savings only. Excludes opening balances, fines, and loan repayments.
           </p>
         </div>
 
@@ -105,7 +112,7 @@ export default function DashboardCharts({
                 <Line
                   type="monotone"
                   dataKey="amount"
-                  stroke="currentColor"
+                  stroke="#059669"
                   strokeWidth={2}
                   dot={{
                     r: 4,
@@ -128,7 +135,7 @@ export default function DashboardCharts({
             </h2>
 
             <p className="mt-1 text-sm text-gray-500">
-              Invested amount compared with current value.
+              Principal versus value for active investments or recorded proceeds for closed investments.
             </p>
           </div>
 
@@ -181,18 +188,19 @@ export default function DashboardCharts({
                       name,
                     ]}
                   />
+                  <Legend />
 
                   <Bar
                     dataKey="investedAmount"
-                    fill="currentColor"
+                    fill="#64748b"
                     opacity={0.35}
                     name="Invested"
                   />
 
                   <Bar
                     dataKey="currentValue"
-                    fill="currentColor"
-                    name="Current Value"
+                    fill="#059669"
+                    name="Value / Returned"
                   />
                 </BarChart>
               </ResponsiveContainer>
