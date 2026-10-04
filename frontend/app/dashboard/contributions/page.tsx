@@ -71,6 +71,44 @@ const monthNames = [
   "December",
 ];
 
+// Local (timezone-safe) YYYY-MM-DD for today.
+const todayISO = () => {
+  const date = new Date();
+
+  return new Date(
+    date.getTime() -
+      date.getTimezoneOffset() *
+        60000
+  )
+    .toISOString()
+    .slice(0, 10);
+};
+
+// The API expects an ISO datetime that is not in the future.
+// Sending local noon avoids timezone drift on past dates,
+// while "today" uses the current instant.
+const toPaymentDateISO = (
+  value: string
+) => {
+  if (value === todayISO()) {
+    return new Date().toISOString();
+  }
+
+  const [y, m, d] = value
+    .split("-")
+    .map(Number);
+
+  return new Date(
+    y,
+    m - 1,
+    d,
+    12,
+    0,
+    0,
+    0
+  ).toISOString();
+};
+
 export default function ContributionsPage() {
   const now =
     new Date();
@@ -123,6 +161,14 @@ export default function ContributionsPage() {
   ] =
     useState<number>(
       1000
+    );
+
+  const [
+    paymentDate,
+    setPaymentDate,
+  ] =
+    useState<string>(
+      todayISO()
     );
 
   const [
@@ -269,6 +315,25 @@ export default function ContributionsPage() {
         return;
       }
 
+      if (!paymentDate) {
+        setError(
+          "Please select the payment date."
+        );
+
+        return;
+      }
+
+      if (
+        paymentDate >
+        todayISO()
+      ) {
+        setError(
+          "Payment date cannot be in the future."
+        );
+
+        return;
+      }
+
       try {
         setSubmitting(
           true
@@ -279,6 +344,10 @@ export default function ContributionsPage() {
           month,
           year,
           paidAmount,
+          paymentDate:
+            toPaymentDateISO(
+              paymentDate
+            ),
           note,
         });
 
@@ -292,6 +361,10 @@ export default function ContributionsPage() {
 
         setPaidAmount(
           1000
+        );
+
+        setPaymentDate(
+          todayISO()
         );
 
         setNote(
@@ -590,6 +663,43 @@ export default function ContributionsPage() {
                   : "bg-white"
               }`}
             />
+          </div>
+
+          {/* Payment Date */}
+          <div>
+            <label className="mb-2 block text-sm font-medium">
+              Payment Date
+            </label>
+
+            <input
+              type="date"
+              value={
+                paymentDate
+              }
+              max={todayISO()}
+              onChange={(
+                event
+              ) =>
+                setPaymentDate(
+                  event.target
+                    .value
+                )
+              }
+              required
+              disabled={
+                isDemo ||
+                submitting
+              }
+              className={`w-full rounded-lg border border-gray-300 px-4 py-3 ${
+                isDemo
+                  ? "cursor-not-allowed bg-gray-100 text-gray-500"
+                  : "bg-white"
+              }`}
+            />
+
+            <p className="mt-1 text-xs text-gray-500">
+              Date the money was actually received.
+            </p>
           </div>
 
           {/* Note */}
