@@ -48,6 +48,9 @@ const validateRequest = (req, adminOnly = false) => {
   if (adminOnly && req.user.role !== "admin") {
     fail("Admin access required", 403);
   }
+  if (adminOnly && (req.dataScope === "demo" || req.user.isDemo)) {
+    fail("Demo mode is read-only", 403);
+  }
 };
 
 const validateId = (value, label) => {
@@ -357,6 +360,43 @@ const notifyMember = async (member, contribution, isUpdate) => {
   }
 };
 
+// Date-only correction is deliberately limited to one unreversed savings
+// receipt. Multiple instalments require selecting an individual ledger entry.
+const correctSavingsDate = async (req, session, contribution, date) => {
+  if (!req.body.note?.trim()) fail("Provide a note explaining the date correction");
+  if (contribution.paidAmount <= 0) fail("There is no savings payment to redate");
+  const entries = await Transaction.find({
+    dataScope: req.dataScope,
+    referenceType: "Contribution",
+    referenceId: contribution._id,
+    type: { $in: ["CONTRIBUTION", "ADJUSTMENT"] },
+  }).session(session);
+  if (entries.length !== 1 || entries[0].type !== "CONTRIBUTION" ||
+      entries[0].direction !== "IN" ||
+      String(entries[0].member) !== String(contribution.member) ||
+      toPaisa(money(entries[0].amount, "Ledger savings")) !== toPaisa(contribution.paidAmount)) {
+    fail("Date correction requires one matching savings receipt with no reversals. Reconcile instalments or missing ledger entries separately.", 409);
+  }
+  const entry = entries[0];
+  const previous = new Date(entry.transactionDate);
+  if (!contribution.paymentDate || Number.isNaN(previous.getTime()) ||
+      previous.getTime() !== new Date(contribution.paymentDate).getTime()) {
+    fail("Savings and ledger dates do not match; reconcile before correcting", 409);
+  }
+  const deadline = fineEligibleAt(contribution.month, contribution.year);
+  const fine = (date >= deadline ||
+    (contribution.paidAmount < contribution.expectedAmount && new Date() >= deadline)) ? 50 : 0;
+  if (contribution.finePaidAmount > fine) {
+    fail("This correction would remove a collected fine. Reconcile or refund the fine first; no money was changed.", 409);
+  }
+  entry.description += ` | Payment date corrected from ${previous.toISOString()} to ${date.toISOString()} by ${req.user._id} at ${new Date().toISOString()}: ${req.body.note.trim()}`;
+  entry.transactionDate = date;
+  await entry.save({ session });
+  contribution.paymentDate = date;
+  contribution.fineAmount = fine;
+  contribution.fineAppliedAt = fine ? deadline : null;
+};
+
 // --------------------------------------------------
 // CREATE / UPDATE
 //
@@ -397,9 +437,10 @@ const saveContribution = async (req, res, isUpdate) => {
       if (
         body.paidAmount === undefined &&
         body.finePaidAmount === undefined &&
+        body.paymentDate === undefined &&
         body.note === undefined
       ) {
-        fail("Provide a savings total, fine total, or note");
+        fail("Provide a savings total, fine total, payment date, or note");
       }
     } else {
       validateId(body.memberId, "member ID");
@@ -540,10 +581,11 @@ const saveContribution = async (req, res, isUpdate) => {
         );
       }
 
-      if (suppliedDate && !hasPaymentChange) {
-        fail(
-          "Date-only corrections require a separate ledger correction"
-        );
+      const dateOnlyCorrection = Boolean(isUpdate && suppliedDate && !hasPaymentChange);
+      if (dateOnlyCorrection) {
+        await correctSavingsDate(req, session, contribution, suppliedDate);
+      } else if (suppliedDate && !hasPaymentChange) {
+        fail("Do not supply a payment date when no payment is recorded");
       }
 
       // Reductions without a supplied date are recorded now.
@@ -691,7 +733,7 @@ const saveContribution = async (req, res, isUpdate) => {
         month: contribution.month,
         year: contribution.year,
       };
-      shouldNotify = hasPaymentChange;
+      shouldNotify = hasPaymentChange || dateOnlyCorrection;
     });
 
     if (shouldNotify) {

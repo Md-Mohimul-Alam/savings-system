@@ -1,462 +1,335 @@
 "use client";
 
-import {
-  FormEvent,
-  useEffect,
-  useState,
-} from "react";
-
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { FormEvent } from "react";
 import {
   addContribution,
-  updateContribution,
   getContributions,
+  updateContribution,
 } from "@/services/contributionApi";
-
-import {
-  getMembers,
-} from "@/services/memberApi";
-
-import {
-  useDemoMode,
-} from "@/hooks/useDemoMode";
+import { getMembers } from "@/services/memberApi";
+import { useDemoMode } from "@/hooks/useDemoMode";
 
 interface Member {
   _id: string;
+  name?: string;
   memberCode: string;
   monthlyContribution: number;
-  user: {
-    name: string;
-    email: string;
-  };
+  user?: { name?: string; email?: string } | null;
 }
 
 interface Contribution {
   _id: string;
+  member: Member | string | null;
   month: number;
   year: number;
   expectedAmount: number;
   paidAmount: number;
+  fineAmount?: number;
+  finePaidAmount?: number;
   status: "due" | "partial" | "paid";
-  paymentDate?: string;
+  paymentDate?: string | null;
+  finePaymentDate?: string | null;
   note?: string;
-  member: {
-    _id: string;
-    memberCode: string;
-    user: {
-      name: string;
-      email: string;
-    };
-  };
 }
 
-const monthNames = [
+const months = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
 ];
-
-const todayISO = () => {
-  const date = new Date();
-  return new Date(date.getTime() - date.getTimezoneOffset() * 60000)
-    .toISOString()
-    .slice(0, 10);
+const inputClass = "w-full rounded-lg border border-gray-300 bg-white px-3 py-2 disabled:bg-gray-100";
+const cellClass = "px-4 py-3 align-top";
+const money = (value: number) => `৳${value.toLocaleString("en-BD", { maximumFractionDigits: 2 })}`;
+const paisa = (value: number) => Math.round(value * 100);
+const memberName = (member?: Member | null) =>
+  member?.name || member?.user?.name || member?.memberCode || "Unknown member";
+const memberIdOf = (item: Contribution) =>
+  typeof item.member === "string" ? item.member : item.member?._id || "";
+const validMoney = (value: string) => {
+  const amount = Number(value);
+  return value.trim() !== "" && Number.isFinite(amount) && amount >= 0 &&
+    Number.isSafeInteger(paisa(amount)) && Math.abs(amount * 100 - paisa(amount)) < 0.000001;
 };
-
-const toPaymentDateISO = (value: string) => {
-  if (value === todayISO()) {
-    return new Date().toISOString();
-  }
-  const [y, m, d] = value.split("-").map(Number);
-  return new Date(y, m - 1, d, 12, 0, 0, 0).toISOString();
+const errorMessage = (error: unknown, fallback: string) => {
+  const item = error as { response?: { data?: { message?: string } }; message?: string };
+  return item?.response?.data?.message || item?.message || fallback;
+};
+const displayDate = (value?: string | null) => {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleString("en-GB", {
+    timeZone: "Asia/Dhaka", day: "2-digit", month: "short", year: "numeric",
+    hour: "2-digit", minute: "2-digit",
+  });
 };
 
 export default function ContributionsPage() {
-  const now = new Date();
   const isDemo = useDemoMode();
-
+  const busy = useRef(false);
   const [members, setMembers] = useState<Member[]>([]);
-  const [contributions, setContributions] = useState<Contribution[]>([]);
-
-  // Form State
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [records, setRecords] = useState<Contribution[]>([]);
+  const [editing, setEditing] = useState<Contribution | null>(null);
   const [memberId, setMemberId] = useState("");
-  const [month, setMonth] = useState(now.getMonth() + 1);
-  const [year, setYear] = useState(now.getFullYear());
-  const [paidAmount, setPaidAmount] = useState<number>(1000);
-  const [paymentDate, setPaymentDate] = useState<string>(todayISO());
+  const [month, setMonth] = useState(1);
+  const [year, setYear] = useState(2026);
+  const [paid, setPaid] = useState("1000");
+  const [finePaid, setFinePaid] = useState("0");
+  const [receipt, setReceipt] = useState("");
   const [note, setNote] = useState("");
-
-  // UI State
   const [loading, setLoading] = useState(true);
+  const [ready, setReady] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  // --------------------------------------------------
-  // LOAD DATA
-  // --------------------------------------------------
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    setReady(false);
     try {
-      setLoading(true);
-      setError("");
-      const [membersData, contributionsData] = await Promise.all([
-        getMembers(),
-        getContributions(),
+      const [memberData, contributionData] = await Promise.all([
+        getMembers(), getContributions(),
       ]);
-      setMembers(membersData.members || []);
-      setContributions(contributionsData.contributions || []);
-    } catch (error: any) {
-      setError(error?.response?.data?.message || "Failed to load contributions");
+      if (!Array.isArray(memberData.members) || !Array.isArray(contributionData.contributions)) {
+        throw new Error("Unexpected response while loading contributions");
+      }
+      setMembers(memberData.members);
+      setRecords(contributionData.contributions);
+      setReady(true);
+    } catch (err) {
+      setError(errorMessage(err, "Failed to load contributions"));
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    loadData();
   }, []);
 
-  // --------------------------------------------------
-  // MEMBER CHANGE
-  // --------------------------------------------------
-  const handleMemberChange = (selectedMemberId: string) => {
-    if (isDemo) return;
-    setMemberId(selectedMemberId);
-    const selectedMember = members.find((m) => m._id === selectedMemberId);
-    if (selectedMember) {
-      setPaidAmount(selectedMember.monthlyContribution);
-    }
-  };
+  useEffect(() => {
+    const parts = new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Dhaka", month: "numeric", year: "numeric",
+    }).formatToParts(new Date());
+    setMonth(Number(parts.find((part) => part.type === "month")?.value || 1));
+    setYear(Number(parts.find((part) => part.type === "year")?.value || 2026));
+    void loadData();
+  }, [loadData]);
 
-  // --------------------------------------------------
-  // EDIT / CANCEL
-  // --------------------------------------------------
-  const handleEditClick = (contribution: Contribution) => {
-    setEditingId(contribution._id);
-    setMemberId(contribution.member._id);
-    setMonth(contribution.month);
-    setYear(contribution.year);
-    setPaidAmount(contribution.paidAmount);
-    setPaymentDate(
-      contribution.paymentDate
-        ? new Date(contribution.paymentDate).toISOString().slice(0, 10)
-        : todayISO()
-    );
-    setNote(contribution.note || "");
-    
-    // Scroll to form
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
+  const selected = members.find((member) => member._id === memberId);
+  const expected = editing?.expectedAmount ?? selected?.monthlyContribution ?? 1000;
+  const oldPaid = editing?.paidAmount ?? 0;
+  const oldFinePaid = editing?.finePaidAmount ?? 0;
+  const savingsDelta = paisa(Number(paid)) - paisa(oldPaid);
+  const fineDelta = paisa(Number(finePaid)) - paisa(oldFinePaid);
+  const increases = savingsDelta > 0 || fineDelta > 0;
+  const changesMoney = savingsDelta !== 0 || fineDelta !== 0;
+  const disabled = Boolean(isDemo) || submitting || loading || !ready;
+  const duplicate = !editing && records.find((item) =>
+    memberIdOf(item) === memberId && item.month === month && item.year === year
+  );
 
-  const handleCancelEdit = () => {
-    setEditingId(null);
+  const resetForm = () => {
+    setEditing(null);
     setMemberId("");
-    setPaidAmount(1000);
-    setPaymentDate(todayISO());
+    setPaid("1000");
+    setFinePaid("0");
+    setReceipt("");
     setNote("");
+  };
+
+  const editRecord = (item: Contribution) => {
+    if (disabled) return;
+    setEditing(item);
+    setMemberId(memberIdOf(item));
+    setMonth(item.month);
+    setYear(item.year);
+    setPaid(String(item.paidAmount));
+    setFinePaid(String(item.finePaidAmount ?? 0));
+    setReceipt("");
+    setNote(item.note || "");
     setError("");
     setSuccess("");
+    document.getElementById("contribution-form")?.scrollIntoView({ behavior: "smooth" });
   };
 
-  // --------------------------------------------------
-  // SUBMIT (ADD OR UPDATE)
-  // --------------------------------------------------
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (busy.current || disabled) return;
     setError("");
     setSuccess("");
-
-    if (isDemo) {
-      setError("Demo Mode is read-only.");
-      return;
+    if (!memberId) return setError("Select a member.");
+    if (!Number.isInteger(month) || month < 1 || month > 12 ||
+        !Number.isInteger(year) || year < 2026 || year > 9999) {
+      return setError("Choose a valid month and year from 2026 onward.");
     }
-
-    if (!memberId && !editingId) {
-      setError("Please select a member.");
-      return;
+    if (duplicate) return setError("This month already exists. Use Edit on that record.");
+    if (!validMoney(paid) || !validMoney(finePaid)) {
+      return setError("Enter non-negative amounts with at most two decimal places.");
     }
-
-    if (!paymentDate) {
-      setError("Please select the payment date.");
-      return;
+    if (paisa(Number(paid)) > paisa(expected)) {
+      return setError("Savings cannot exceed this month's expected amount. Record other months separately.");
     }
+    if (Number(finePaid) > 50) return setError("The collected fine cannot exceed ৳50 for one month.");
 
-    if (paymentDate > todayISO()) {
-      setError("Payment date cannot be in the future.");
-      return;
-    }
-
-    try {
-      setSubmitting(true);
-      const payload = {
-        paidAmount,
-        paymentDate: toPaymentDateISO(paymentDate),
-        note,
-      };
-
-      if (editingId) {
-        await updateContribution(editingId, payload);
-        setSuccess("Contribution updated successfully.");
-        handleCancelEdit(); // Reset form after update
-      } else {
-        await addContribution({
-          memberId,
-          month,
-          year,
-          ...payload,
-        });
-        setSuccess("Contribution added successfully.");
-        // Reset only amount and note for quick multiple entries
-        setPaidAmount(1000);
-        setNote("");
+    let paymentDate: string | undefined;
+    if (increases || (editing && !changesMoney && receipt)) {
+      if (editing && !changesMoney && !note.trim()) {
+        return setError("Explain the payment date correction in Note.");
       }
-      
+      if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(receipt)) {
+        return setError("Enter the actual receipt date and time in Bangladesh time.");
+      }
+      const date = new Date(`${receipt}:00+06:00`);
+      if (Number.isNaN(date.getTime()) || date.getTime() > Date.now()) {
+        return setError("Receipt date must be valid and cannot be in the future.");
+      }
+      paymentDate = date.toISOString();
+    }
+
+    busy.current = true;
+    setSubmitting(true);
+    let saved = false;
+    try {
+      const payload = {
+        paidAmount: Number(paid), finePaidAmount: Number(finePaid), note,
+        ...(paymentDate ? { paymentDate } : {}),
+      };
+      if (editing) {
+        await updateContribution(editing._id, payload);
+      } else {
+        await addContribution({ memberId, month, year, ...payload });
+      }
+      saved = true;
+      resetForm();
+      setSuccess("Contribution saved. Savings and fines were recorded separately.");
       await loadData();
-    } catch (error: any) {
-      setError(error?.response?.data?.message || "Failed to save contribution");
+    } catch (err) {
+      setError(errorMessage(err, "Failed to save contribution"));
+      // Refresh before another attempt if the request outcome is uncertain.
+      await loadData();
     } finally {
+      if (!saved) resetForm();
       setSubmitting(false);
+      busy.current = false;
     }
   };
 
-  // --------------------------------------------------
-  // UI
-  // --------------------------------------------------
-  if (loading) {
-    return <p className="text-gray-500">Loading contributions...</p>;
-  }
-
   return (
-    <div>
-      {/* Page Header */}
-      <div className="mb-8">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Contributions</h1>
-            <p className="mt-2 text-gray-500">Record and review monthly member contributions.</p>
-          </div>
-          {isDemo && (
-            <span className="w-fit rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
-              Demo Mode · Read Only
-            </span>
-          )}
-        </div>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900">Contributions</h1>
+        <p className="mt-2 text-gray-500">Monthly savings, fines, and payment history.</p>
       </div>
+      {isDemo && <p className="rounded-lg bg-amber-50 p-4 text-amber-800">Demo Mode — read only.</p>}
+      {error && <p role="alert" className="rounded-lg bg-red-50 p-4 text-red-700">{error}</p>}
+      {success && <p role="status" className="rounded-lg bg-green-50 p-4 text-green-700">{success}</p>}
+      <button type="button" disabled={loading || submitting} onClick={() => {
+        resetForm(); setError(""); void loadData();
+      }} className="rounded-lg border px-4 py-2 disabled:opacity-50">
+        {loading ? "Loading…" : "Refresh records"}
+      </button>
 
-      {/* Demo Notice, Error, Success */}
-      {isDemo && (
-        <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 p-4">
-          <p className="text-sm font-semibold text-amber-900">Demo Mode</p>
-          <p className="mt-1 text-sm text-amber-700">You can view all sample contribution records, but adding or modifying contributions is disabled.</p>
-        </div>
-      )}
-      {error && <div className="mb-5 rounded-lg bg-red-50 p-4 text-red-600">{error}</div>}
-      {success && <div className="mb-5 rounded-lg bg-green-50 p-4 text-green-700">{success}</div>}
-
-      {/* Add / Edit Contribution Form */}
-      <div className={`mb-8 rounded-xl border bg-white p-6 ${isDemo ? "border-amber-200" : "border-gray-200"}`}>
-        <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <h2 className="text-xl font-semibold">
-            {editingId ? "Edit Contribution" : "Add Contribution"}
-          </h2>
-          {editingId && (
-            <button
-              type="button"
-              onClick={handleCancelEdit}
-              className="text-sm text-gray-500 hover:text-gray-800 underline"
-            >
-              Cancel Edit
-            </button>
-          )}
-        </div>
-
-        <form onSubmit={handleSubmit} className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-          {/* Member */}
-          <div>
-            <label className="mb-2 block text-sm font-medium">Member</label>
-            <select
-              value={memberId}
-              onChange={(e) => handleMemberChange(e.target.value)}
-              required
-              disabled={isDemo || submitting || !!editingId}
-              className={`w-full rounded-lg border border-gray-300 px-4 py-3 ${
-                isDemo || editingId ? "cursor-not-allowed bg-gray-100 text-gray-500" : "bg-white"
-              }`}
-            >
+      <form id="contribution-form" onSubmit={handleSubmit} className="rounded-xl border bg-white p-6">
+        <h2 className="mb-2 text-xl font-semibold">{editing ? "Edit contribution" : "Add contribution"}</h2>
+        <p className="mb-5 text-sm text-gray-600">
+          Enter cumulative totals for one contribution month. If ৳500 was paid and another ৳500 arrives,
+          enter ৳1,000. Split catch-up payments across the months they settle.
+        </p>
+        <fieldset disabled={disabled} className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <label className="space-y-2 text-sm font-medium">
+            <span>Member</span>
+            <select required disabled={Boolean(editing)} value={memberId} className={inputClass}
+              onChange={(event) => {
+                setMemberId(event.target.value);
+                setPaid(String(members.find((item) => item._id === event.target.value)?.monthlyContribution ?? 1000));
+                setFinePaid("0"); setReceipt(""); setNote("");
+              }}>
               <option value="">Select member</option>
-              {members.map((member) => (
-                <option key={member._id} value={member._id}>
-                  {member.memberCode} - {member.user?.name}
-                </option>
-              ))}
+              {members.map((member) => <option key={member._id} value={member._id}>
+                {memberName(member)} — {member.memberCode}
+              </option>)}
             </select>
-          </div>
-
-          {/* Month */}
-          <div>
-            <label className="mb-2 block text-sm font-medium">Month</label>
-            <select
-              value={month}
-              onChange={(e) => setMonth(Number(e.target.value))}
-              disabled={isDemo || submitting || !!editingId}
-              className={`w-full rounded-lg border border-gray-300 px-4 py-3 ${
-                isDemo || editingId ? "cursor-not-allowed bg-gray-100 text-gray-500" : "bg-white"
-              }`}
-            >
-              {monthNames.map((name, index) => (
-                <option key={name} value={index + 1}>{name}</option>
-              ))}
+          </label>
+          <label className="space-y-2 text-sm font-medium">
+            <span>Contribution month</span>
+            <select value={month} disabled={Boolean(editing)} className={inputClass}
+              onChange={(event) => setMonth(Number(event.target.value))}>
+              {months.map((name, index) => <option key={name} value={index + 1}>{name}</option>)}
             </select>
-          </div>
-
-          {/* Year */}
-          <div>
-            <label className="mb-2 block text-sm font-medium">Year</label>
-            <input
-              type="number"
-              value={year}
-              onChange={(e) => setYear(Number(e.target.value))}
-              disabled={isDemo || submitting || !!editingId}
-              className={`w-full rounded-lg border border-gray-300 px-4 py-3 ${
-                isDemo || editingId ? "cursor-not-allowed bg-gray-100 text-gray-500" : "bg-white"
-              }`}
-            />
-          </div>
-
-          {/* Paid Amount */}
-          <div>
-            <label className="mb-2 block text-sm font-medium">Paid Amount</label>
-            <input
-              type="number"
-              min="0"
-              value={paidAmount}
-              onChange={(e) => setPaidAmount(Number(e.target.value))}
-              required
-              disabled={isDemo || submitting}
-              className={`w-full rounded-lg border border-gray-300 px-4 py-3 ${
-                isDemo ? "cursor-not-allowed bg-gray-100 text-gray-500" : "bg-white"
-              }`}
-            />
-          </div>
-
-          {/* Payment Date */}
-          <div>
-            <label className="mb-2 block text-sm font-medium">Payment Date</label>
-            <input
-              type="date"
-              value={paymentDate}
-              max={todayISO()}
-              onChange={(e) => setPaymentDate(e.target.value)}
-              required
-              disabled={isDemo || submitting}
-              className={`w-full rounded-lg border border-gray-300 px-4 py-3 ${
-                isDemo ? "cursor-not-allowed bg-gray-100 text-gray-500" : "bg-white"
-              }`}
-            />
-            <p className="mt-1 text-xs text-gray-500">Date the money was actually received.</p>
-          </div>
-
-          {/* Note */}
-          <div className="md:col-span-2 xl:col-span-3">
-            <label className="mb-2 block text-sm font-medium">Note</label>
-            <input
-              type="text"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              disabled={isDemo || submitting}
-              placeholder="Optional note"
-              className={`w-full rounded-lg border border-gray-300 px-4 py-3 ${
-                isDemo ? "cursor-not-allowed bg-gray-100 text-gray-500" : "bg-white"
-              }`}
-            />
-          </div>
-
-          {/* Submit & Cancel Buttons */}
-          <div className="flex items-center gap-3 md:col-span-2 xl:col-span-3">
-            <button
-              type="submit"
-              disabled={submitting || isDemo}
-              className={`rounded-lg px-6 py-3 font-medium text-white transition ${
-                isDemo ? "cursor-not-allowed bg-gray-400" : "bg-black hover:bg-gray-800"
-              } disabled:opacity-50`}
-            >
-              {isDemo ? "Disabled" : submitting ? "Saving..." : editingId ? "Update Contribution" : "Add Contribution"}
-            </button>
-            
-            {editingId && (
-              <button
-                type="button"
-                onClick={handleCancelEdit}
-                className="rounded-lg border border-gray-300 px-6 py-3 font-medium text-gray-700 hover:bg-gray-50"
-              >
-                Cancel
+          </label>
+          <label className="space-y-2 text-sm font-medium">
+            <span>Year</span>
+            <input required type="number" min="2026" max="9999" step="1" value={year}
+              disabled={Boolean(editing)} onChange={(event) => setYear(Number(event.target.value))} className={inputClass} />
+          </label>
+          <label className="space-y-2 text-sm font-medium">
+            <span>Savings paid total (expected {money(expected)})</span>
+            <input required type="number" min="0" max={expected} step="0.01" value={paid}
+              onChange={(event) => setPaid(event.target.value)} className={inputClass} />
+          </label>
+          <label className="space-y-2 text-sm font-medium">
+            <span>Fine collected total</span>
+            <input required type="number" min="0" max="50" step="0.01" value={finePaid}
+              onChange={(event) => setFinePaid(event.target.value)} className={inputClass} />
+          </label>
+          <label className="space-y-2 text-sm font-medium">
+            <span>Actual payment date and time — Bangladesh (UTC+6)</span>
+            <input type="datetime-local" step="60" value={receipt} required={increases} disabled={!increases && !(editing && !changesMoney)}
+              onChange={(event) => setReceipt(event.target.value)} className={inputClass} />
+            <span className="block text-xs font-normal text-gray-500">Select when the money was received. This is separate from the contribution month and year.</span>
+          </label>
+          <label className="space-y-2 text-sm font-medium md:col-span-2 xl:col-span-3">
+            <span>Note</span>
+            <textarea rows={2} value={note} onChange={(event) => setNote(event.target.value)} className={inputClass} />
+          </label>
+          <div className="space-y-3 text-sm md:col-span-2 xl:col-span-3">
+            <p>Late fines are assessed by the server. Enter the date money was received, not today's entry date.</p>
+            {editing && <p>Currently recorded: savings {money(oldPaid)}, fine collected {money(oldFinePaid)}.
+              {" "}Assessed fine: {money(editing.fineAmount ?? 0)}.</p>}
+            {changesMoney && validMoney(paid) && validMoney(finePaid) &&
+              <p>Net change to recorded cash: {money((savingsDelta + fineDelta) / 100)}.</p>}
+            {editing && (savingsDelta < 0 || fineDelta < 0) &&
+              <p className="text-amber-800">Reducing a total records a cash correction. The backend checks available cash.</p>}
+            <p className="text-gray-500">To correct an existing savings payment date, keep both amounts unchanged, select the corrected date, and explain why in Note. Leave the date blank to keep it unchanged. This supports one unreversed savings receipt; instalments and collected-fine refunds require separate reconciliation. Fine payment dates are not changed.</p>
+            {duplicate && <p className="text-amber-800">This member already has a record for this month. Select Edit below.</p>}
+            <div className="flex gap-3">
+              <button type="submit" disabled={Boolean(duplicate)} className="rounded-lg bg-black px-5 py-3 text-white disabled:opacity-50">
+                {submitting ? "Saving…" : editing ? "Save changes" : "Add contribution"}
               </button>
-            )}
-          </div>
-        </form>
-      </div>
-
-      {/* Contribution History */}
-      <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
-        <div className="border-b border-gray-200 px-5 py-4">
-          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="font-semibold text-gray-900">Contribution History</h2>
-              <p className="mt-1 text-sm text-gray-500">
-                {contributions.length} contribution record{contributions.length === 1 ? "" : "s"}
-              </p>
+              <button type="button" onClick={resetForm} className="rounded-lg border px-5 py-3">Cancel / clear</button>
             </div>
           </div>
-        </div>
+        </fieldset>
+      </form>
 
-        {contributions.length === 0 ? (
-          <div className="p-8 text-center text-sm text-gray-500">
-            No contribution records found.
-          </div>
-        ) : (
-          <table className="w-full text-left">
-            <thead className="border-b border-gray-200 bg-gray-50">
-              <tr>
-                <th className="px-5 py-3 text-sm font-medium text-gray-600">Member</th>
-                <th className="px-5 py-3 text-sm font-medium text-gray-600">Month</th>
-                <th className="px-5 py-3 text-sm font-medium text-gray-600">Expected</th>
-                <th className="px-5 py-3 text-sm font-medium text-gray-600">Paid</th>
-                <th className="px-5 py-3 text-sm font-medium text-gray-600">Status</th>
-                <th className="px-5 py-3 text-sm font-medium text-gray-600">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {contributions.map((contribution) => (
-                <tr key={contribution._id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
-                  <td className="px-5 py-4">
-                    <div className="font-medium">{contribution.member?.user?.name}</div>
-                    <div className="text-sm text-gray-500">{contribution.member?.memberCode}</div>
-                  </td>
-                  <td className="px-5 py-4">
-                    {monthNames[contribution.month - 1]} {contribution.year}
-                  </td>
-                  <td className="px-5 py-4">৳{contribution.expectedAmount.toLocaleString()}</td>
-                  <td className="px-5 py-4">৳{contribution.paidAmount.toLocaleString()}</td>
-                  <td className="px-5 py-4">
-                    <span className={`rounded-full px-3 py-1 text-sm capitalize ${
-                      contribution.status === "paid" ? "bg-green-50 text-green-700" :
-                      contribution.status === "partial" ? "bg-amber-50 text-amber-700" :
-                      "bg-red-50 text-red-700"
-                    }`}>
-                      {contribution.status}
-                    </span>
-                  </td>
-                  <td className="px-5 py-4">
-                    <button
-                      onClick={() => handleEditClick(contribution)}
-                      disabled={isDemo}
-                      className="text-sm font-medium text-blue-600 hover:text-blue-800 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Edit
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
+      <div className="overflow-x-auto rounded-xl border bg-white">
+        <div className="border-b p-5">
+          <h2 className="font-semibold">Contribution history ({records.length})</h2>
+          <p className="mt-1 text-sm text-gray-500">Existing monthly records only. Dates shown in Bangladesh time.</p>
+        </div>
+        {records.length === 0 ? <p className="p-6 text-gray-500">{loading ? "Loading…" : "No contribution records found."}</p> : (
+          <table className="w-full text-left text-sm">
+            <thead className="bg-gray-50"><tr>
+              {["Member", "Month", "Expected", "Savings paid", "Fine assessed", "Fine collected", "Savings due", "Fine due", "Status", "Receipt dates", "Note", "Action"].map((heading) =>
+                <th key={heading} scope="col" className={cellClass}>{heading}</th>
+              )}
+            </tr></thead>
+            <tbody>{records.map((item) => {
+              const member = typeof item.member === "object" ? item.member : members.find((entry) => entry._id === item.member);
+              const savingsDue = Math.max(0, (paisa(item.expectedAmount) - paisa(item.paidAmount)) / 100);
+              const fineDue = Math.max(0, (paisa(item.fineAmount ?? 0) - paisa(item.finePaidAmount ?? 0)) / 100);
+              return <tr key={item._id} className="border-t">
+                <td className={cellClass}><div className="font-medium">{memberName(member)}</div><div className="text-gray-500">{member?.memberCode}</div></td>
+                <td className={`${cellClass} whitespace-nowrap`}>{months[item.month - 1]} {item.year}</td>
+                <td className={cellClass}>{money(item.expectedAmount)}</td>
+                <td className={cellClass}>{money(item.paidAmount)}</td>
+                <td className={cellClass}>{money(item.fineAmount ?? 0)}</td>
+                <td className={cellClass}>{money(item.finePaidAmount ?? 0)}</td>
+                <td className={cellClass}>{money(savingsDue)}</td>
+                <td className={cellClass}>{money(fineDue)}</td>
+                <td className={cellClass}><span className="capitalize">Savings: {item.status}</span><div>{fineDue > 0 ? "Fine outstanding" : (item.fineAmount ?? 0) > 0 ? "Fine paid" : "No fine"}</div></td>
+                <td className={`${cellClass} whitespace-nowrap`}><div>Savings: {displayDate(item.paymentDate)}</div><div>Fine: {displayDate(item.finePaymentDate)}</div></td>
+                <td className={`${cellClass} min-w-40 whitespace-pre-wrap`}>{item.note || "—"}</td>
+                <td className={cellClass}><button type="button" disabled={disabled || !memberIdOf(item)} onClick={() => editRecord(item)} className="rounded border px-3 py-2 disabled:opacity-50">Edit</button></td>
+              </tr>;
+            })}</tbody>
           </table>
         )}
       </div>
