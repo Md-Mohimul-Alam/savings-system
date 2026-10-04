@@ -5,19 +5,13 @@ const userSchema = new mongoose.Schema(
   {
     name: {
       type: String,
-      required: [
-        true,
-        "Name is required",
-      ],
+      required: [true, "Name is required"],
       trim: true,
     },
 
     email: {
       type: String,
-      required: [
-        true,
-        "Email is required",
-      ],
+      required: [true, "Email is required"],
       unique: true,
       lowercase: true,
       trim: true,
@@ -25,20 +19,25 @@ const userSchema = new mongoose.Schema(
 
     phone: {
       type: String,
-      required: [
-        true,
-        "Phone number is required",
-      ],
+      required: [true, "Phone number is required"],
       trim: true,
     },
 
     password: {
       type: String,
-      required: [
-        true,
-        "Password is required",
-      ],
+      required: [true, "Password is required"],
       minlength: 6,
+      select: false,
+    },
+
+    // Forgot-password fields
+    resetPasswordToken: {
+      type: String,
+      select: false,
+    },
+
+    resetPasswordExpires: {
+      type: Date,
       select: false,
     },
 
@@ -52,20 +51,13 @@ const userSchema = new mongoose.Schema(
 
     role: {
       type: String,
-      enum: [
-        "admin",
-        "member",
-      ],
+      enum: ["admin", "member"],
       default: "member",
     },
 
     status: {
       type: String,
-      enum: [
-        "active",
-        "pending",
-        "suspended",
-      ],
+      enum: ["active", "pending", "suspended"],
       default: "pending",
     },
 
@@ -77,10 +69,7 @@ const userSchema = new mongoose.Schema(
 
     dataScope: {
       type: String,
-      enum: [
-        "live",
-        "demo",
-      ],
+      enum: ["live", "demo"],
       default: "live",
       index: true,
     },
@@ -90,48 +79,19 @@ const userSchema = new mongoose.Schema(
   }
 );
 
-// --------------------------------------------------
-// HASH PASSWORD
-// --------------------------------------------------
-
-userSchema.pre(
-  "save",
-  async function () {
-    if (
-      !this.isModified(
-        "password"
-      )
-    ) {
-      return;
-    }
-
-    const salt =
-      await bcrypt.genSalt(10);
-
-    this.password =
-      await bcrypt.hash(
-        this.password,
-        salt
-      );
+// Hash a password whenever it is created or changed.
+userSchema.pre("save", async function () {
+  if (!this.isModified("password")) {
+    return;
   }
-);
 
-// --------------------------------------------------
-// COMPARE PASSWORD
-// --------------------------------------------------
+  const salt = await bcrypt.genSalt(10);
+  this.password = await bcrypt.hash(this.password, salt);
+});
 
-userSchema.methods.comparePassword =
-  async function (
-    enteredPassword
-  ) {
-    return bcrypt.compare(
-      enteredPassword,
-      this.password
-    );
-  };
+// Compare a supplied password with the stored hash.
+userSchema.methods.comparePassword = async function (enteredPassword) {
+  return bcrypt.compare(enteredPassword, this.password);
+};
 
-module.exports =
-  mongoose.model(
-    "User",
-    userSchema
-  );
+module.exports = mongoose.model("User", userSchema);

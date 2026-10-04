@@ -3,6 +3,8 @@ const express = require("express");
 const {
   registerUser,
   loginUser,
+  forgotPassword,
+  resetPassword,
 } = require("../controllers/authController");
 
 const {
@@ -19,61 +21,39 @@ const router = express.Router();
 // PUBLIC AUTH ROUTES
 // --------------------------------------------------
 
-router.post(
-  "/register",
-  registerUser
-);
+router.post("/register", registerUser);
+router.post("/login", loginUser);
 
-router.post(
-  "/login",
-  loginUser
-);
+// --------------------------------------------------
+// PUBLIC FORGOT-PASSWORD ROUTES
+// --------------------------------------------------
+
+router.post("/forgot-password", forgotPassword);
+router.post("/reset-password/:token", resetPassword);
 
 // --------------------------------------------------
 // CURRENT LOGGED-IN USER
 // --------------------------------------------------
 
-router.get(
-  "/me",
-  protect,
-  (req, res) => {
-    return res.status(200).json({
-      success: true,
-
-      user: {
-        id:
-          req.user._id,
-
-        adminCode:
-          req.user.role ===
-          "admin"
-            ? req.user.adminCode
-            : undefined,
-
-        name:
-          req.user.name,
-
-        email:
-          req.user.email,
-
-        phone:
-          req.user.phone,
-
-        role:
-          req.user.role,
-
-        status:
-          req.user.status,
-
-        isDemo:
-          req.user.isDemo === true,
-
-        dataScope:
-          req.dataScope,
-      },
-    });
-  }
-);
+router.get("/me", protect, (req, res) => {
+  return res.status(200).json({
+    success: true,
+    user: {
+      id: req.user._id,
+      adminCode:
+        req.user.role === "admin"
+          ? req.user.adminCode
+          : undefined,
+      name: req.user.name,
+      email: req.user.email,
+      phone: req.user.phone,
+      role: req.user.role,
+      status: req.user.status,
+      isDemo: req.user.isDemo === true,
+      dataScope: req.dataScope,
+    },
+  });
+});
 
 // --------------------------------------------------
 // ADMIN TEST
@@ -86,28 +66,14 @@ router.get(
   (req, res) => {
     return res.status(200).json({
       success: true,
-
-      message:
-        "Admin access granted.",
-
+      message: "Admin access granted.",
       admin: {
-        id:
-          req.user._id,
-
-        adminCode:
-          req.user.adminCode,
-
-        name:
-          req.user.name,
-
-        email:
-          req.user.email,
-
-        isDemo:
-          req.user.isDemo === true,
-
-        dataScope:
-          req.dataScope,
+        id: req.user._id,
+        adminCode: req.user.adminCode,
+        name: req.user.name,
+        email: req.user.email,
+        isDemo: req.user.isDemo === true,
+        dataScope: req.dataScope,
       },
     });
   }
