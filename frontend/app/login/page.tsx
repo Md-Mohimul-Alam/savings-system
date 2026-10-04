@@ -293,23 +293,22 @@ export default function LoginPage() {
 
             <input
               type="password"
-              value={
-                password
-              }
-              onChange={(
-                event
-              ) =>
-                setPassword(
-                  event
-                    .target
-                    .value
-                )
-              }
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
               required
               autoComplete="current-password"
               placeholder="Enter password"
               className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
             />
+
+            <div className="mt-2 text-right">
+              <Link
+                href="/forgot-password"
+                className="text-sm font-semibold text-emerald-700 hover:underline"
+              >
+                Forgot password?
+              </Link>
+            </div>
           </div>
 
           <button
