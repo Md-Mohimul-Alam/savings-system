@@ -1,5 +1,4 @@
 "use client";
-
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import {
@@ -9,7 +8,6 @@ import {
 } from "@/services/contributionApi";
 import { getMembers } from "@/services/memberApi";
 import { useDemoMode } from "@/hooks/useDemoMode";
-
 interface Member {
   _id: string;
   name?: string;
@@ -17,7 +15,6 @@ interface Member {
   monthlyContribution: number;
   user?: { name?: string; email?: string } | null;
 }
-
 interface Contribution {
   _id: string;
   member: Member | string | null;
@@ -32,7 +29,6 @@ interface Contribution {
   finePaymentDate?: string | null;
   note?: string;
 }
-
 const months = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
@@ -46,48 +42,77 @@ const memberName = (member?: Member | null) =>
 const memberIdOf = (item: Contribution) =>
   typeof item.member === "string" ? item.member : item.member?._id || "";
 const validMoney = (value: string) => {
-  const amount = Number(value);
+const amount = Number(value);
   return value.trim() !== "" && Number.isFinite(amount) && amount >= 0 &&
     Number.isSafeInteger(paisa(amount)) && Math.abs(amount * 100 - paisa(amount)) < 0.000001;
 };
 const errorMessage = (error: unknown, fallback: string) => {
-  const item = error as { response?: { data?: { message?: string } }; message?: string };
+const item = error as { response?: { data?: { message?: string } }; message?: string };
   return item?.response?.data?.message || item?.message || fallback;
 };
 const displayDate = (value?: string | null) => {
   if (!value) return "—";
-  const date = new Date(value);
+const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "—";
   return date.toLocaleString("en-GB", {
     timeZone: "Asia/Dhaka", day: "2-digit", month: "short", year: "numeric",
     hour: "2-digit", minute: "2-digit",
   });
 };
+type HistoryFilters = {
+  month: string;
+  year: string;
+  status: string;
+  fine: string;
+  search: string;
+};
+const emptyFilters: HistoryFilters = { month: "", year: "", status: "", fine: "", search: "" };
+const filterHistory = (records: Contribution[], members: Member[], filters: HistoryFilters) => {
+  const search = filters.search.trim().toLocaleLowerCase();
+  return records.filter(item => {
+    const member = typeof item.member === "object" ? item.member : members.find(m => m._id === item.member);
+    const fineKnown = typeof item.fineAmount === "number" && typeof item.finePaidAmount === "number";
+    const fineDue = fineKnown ? paisa(item.fineAmount!) - paisa(item.finePaidAmount!) : null;
+    const savingsDue = paisa(item.expectedAmount) - paisa(item.paidAmount);
+    if (filters.month && item.month !== Number(filters.month)) return false;
+    if (filters.year && item.year !== Number(filters.year)) return false;
+    if (filters.status === "outstanding") {
+      if (!(savingsDue > 0 || (fineDue !== null && fineDue > 0))) return false;
+    } else if (filters.status === "settled") {
+      if (!(savingsDue <= 0 && fineDue !== null && fineDue <= 0)) return false;
+    } else if (filters.status && item.status !== filters.status) return false;
+    if (filters.fine === "due" && !(fineDue !== null && fineDue > 0)) return false;
+    if (filters.fine === "paid" && !(fineKnown && item.fineAmount! > 0 && fineDue! <= 0)) return false;
+    if (filters.fine === "none" && !(fineKnown && item.fineAmount === 0)) return false;
+    if (search && !`${memberName(member)} ${member?.user?.name || ""} ${member?.memberCode || ""}`.toLocaleLowerCase().includes(search)) return false;
+    return true;
+  });
+};
 
 export default function ContributionsPage() {
-  const isDemo = useDemoMode();
-  const busy = useRef(false);
-  const [members, setMembers] = useState<Member[]>([]);
-  const [records, setRecords] = useState<Contribution[]>([]);
-  const [editing, setEditing] = useState<Contribution | null>(null);
-  const [memberId, setMemberId] = useState("");
-  const [month, setMonth] = useState(1);
-  const [year, setYear] = useState(2026);
-  const [paid, setPaid] = useState("1000");
-  const [finePaid, setFinePaid] = useState("0");
-  const [receipt, setReceipt] = useState("");
-  const [note, setNote] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [ready, setReady] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-
-  const loadData = useCallback(async () => {
+  const [filters, setFilters] = useState<HistoryFilters>(emptyFilters);
+const isDemo = useDemoMode();
+const busy = useRef(false);
+const [members, setMembers] = useState<Member[]>([]);
+const [records, setRecords] = useState<Contribution[]>([]);
+const [editing, setEditing] = useState<Contribution | null>(null);
+const [memberId, setMemberId] = useState("");
+const [month, setMonth] = useState(1);
+const [year, setYear] = useState(2026);
+const [paid, setPaid] = useState("1000");
+const [finePaid, setFinePaid] = useState("0");
+const [receipt, setReceipt] = useState("");
+const [note, setNote] = useState("");
+const [loading, setLoading] = useState(true);
+const [ready, setReady] = useState(false);
+const [submitting, setSubmitting] = useState(false);
+const [error, setError] = useState("");
+const [success, setSuccess] = useState("");
+const loadData = useCallback(async () => {
     setLoading(true);
     setReady(false);
     try {
-      const [memberData, contributionData] = await Promise.all([
+const [memberData, contributionData] = await Promise.all([
         getMembers(), getContributions(),
       ]);
       if (!Array.isArray(memberData.members) || !Array.isArray(contributionData.contributions)) {
@@ -102,30 +127,27 @@ export default function ContributionsPage() {
       setLoading(false);
     }
   }, []);
-
   useEffect(() => {
-    const parts = new Intl.DateTimeFormat("en-GB", {
+const parts = new Intl.DateTimeFormat("en-GB", {
       timeZone: "Asia/Dhaka", month: "numeric", year: "numeric",
     }).formatToParts(new Date());
     setMonth(Number(parts.find((part) => part.type === "month")?.value || 1));
     setYear(Number(parts.find((part) => part.type === "year")?.value || 2026));
     void loadData();
   }, [loadData]);
-
-  const selected = members.find((member) => member._id === memberId);
-  const expected = editing?.expectedAmount ?? selected?.monthlyContribution ?? 1000;
-  const oldPaid = editing?.paidAmount ?? 0;
-  const oldFinePaid = editing?.finePaidAmount ?? 0;
-  const savingsDelta = paisa(Number(paid)) - paisa(oldPaid);
-  const fineDelta = paisa(Number(finePaid)) - paisa(oldFinePaid);
-  const increases = savingsDelta > 0 || fineDelta > 0;
-  const changesMoney = savingsDelta !== 0 || fineDelta !== 0;
-  const disabled = Boolean(isDemo) || submitting || loading || !ready;
-  const duplicate = !editing && records.find((item) =>
+const selected = members.find((member) => member._id === memberId);
+const expected = editing?.expectedAmount ?? selected?.monthlyContribution ?? 1000;
+const oldPaid = editing?.paidAmount ?? 0;
+const oldFinePaid = editing?.finePaidAmount ?? 0;
+const savingsDelta = paisa(Number(paid)) - paisa(oldPaid);
+const fineDelta = paisa(Number(finePaid)) - paisa(oldFinePaid);
+const increases = savingsDelta > 0 || fineDelta > 0;
+const changesMoney = savingsDelta !== 0 || fineDelta !== 0;
+const disabled = Boolean(isDemo) || submitting || loading || !ready;
+const duplicate = !editing && records.find((item) =>
     memberIdOf(item) === memberId && item.month === month && item.year === year
   );
-
-  const resetForm = () => {
+const resetForm = () => {
     setEditing(null);
     setMemberId("");
     setPaid("1000");
@@ -133,8 +155,7 @@ export default function ContributionsPage() {
     setReceipt("");
     setNote("");
   };
-
-  const editRecord = (item: Contribution) => {
+const editRecord = (item: Contribution) => {
     if (disabled) return;
     setEditing(item);
     setMemberId(memberIdOf(item));
@@ -148,8 +169,7 @@ export default function ContributionsPage() {
     setSuccess("");
     document.getElementById("contribution-form")?.scrollIntoView({ behavior: "smooth" });
   };
-
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (busy.current || disabled) return;
     setError("");
@@ -167,8 +187,7 @@ export default function ContributionsPage() {
       return setError("Savings cannot exceed this month's expected amount. Record other months separately.");
     }
     if (Number(finePaid) > 50) return setError("The collected fine cannot exceed ৳50 for one month.");
-
-    let paymentDate: string | undefined;
+let paymentDate: string | undefined;
     if (increases || (editing && !changesMoney && receipt)) {
       if (editing && !changesMoney && !note.trim()) {
         return setError("Explain the payment date correction in Note.");
@@ -176,18 +195,17 @@ export default function ContributionsPage() {
       if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(receipt)) {
         return setError("Enter the actual receipt date and time in Bangladesh time.");
       }
-      const date = new Date(`${receipt}:00+06:00`);
+const date = new Date(`${receipt}:00+06:00`);
       if (Number.isNaN(date.getTime()) || date.getTime() > Date.now()) {
         return setError("Receipt date must be valid and cannot be in the future.");
       }
       paymentDate = date.toISOString();
     }
-
     busy.current = true;
     setSubmitting(true);
-    let saved = false;
+let saved = false;
     try {
-      const payload = {
+const payload = {
         paidAmount: Number(paid), finePaidAmount: Number(finePaid), note,
         ...(paymentDate ? { paymentDate } : {}),
       };
@@ -202,7 +220,7 @@ export default function ContributionsPage() {
       await loadData();
     } catch (err) {
       setError(errorMessage(err, "Failed to save contribution"));
-      // Refresh before another attempt if the request outcome is uncertain.
+// Refresh before another attempt if the request outcome is uncertain.
       await loadData();
     } finally {
       if (!saved) resetForm();
@@ -210,6 +228,11 @@ export default function ContributionsPage() {
       busy.current = false;
     }
   };
+  const filteredRecords = filterHistory(records, members, filters);
+  const filterYears = [...new Set(records.map(item => item.year))].sort((a, b) => b - a);
+  const hasFilters = Object.values(filters).some(value => value !== "");
+  const setFilter = (key: keyof HistoryFilters, value: string) =>
+    setFilters(current => ({ ...current, [key]: value }));
 
   return (
     <div className="space-y-6">
@@ -225,7 +248,6 @@ export default function ContributionsPage() {
       }} className="rounded-lg border px-4 py-2 disabled:opacity-50">
         {loading ? "Loading…" : "Refresh records"}
       </button>
-
       <form id="contribution-form" onSubmit={handleSubmit} className="rounded-xl border bg-white p-6">
         <h2 className="mb-2 text-xl font-semibold">{editing ? "Edit contribution" : "Add contribution"}</h2>
         <p className="mb-5 text-sm text-gray-600">
@@ -298,23 +320,71 @@ export default function ContributionsPage() {
           </div>
         </fieldset>
       </form>
-
       <div className="overflow-x-auto rounded-xl border bg-white">
         <div className="border-b p-5">
-          <h2 className="font-semibold">Contribution history ({records.length})</h2>
+          <h2 className="font-semibold">Contribution history</h2>
           <p className="mt-1 text-sm text-gray-500">Existing monthly records only. Dates shown in Bangladesh time.</p>
         </div>
-        {records.length === 0 ? <p className="p-6 text-gray-500">{loading ? "Loading…" : "No contribution records found."}</p> : (
+        <div className="border-b p-5">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+          <label className="space-y-2 text-sm font-medium">
+            <span>Search member</span>
+            <input type="search" value={filters.search} onChange={event => setFilter("search", event.target.value)}
+              placeholder="Name or member code" className={inputClass} />
+          </label>
+          <label className="space-y-2 text-sm font-medium">
+            <span>Contribution month</span>
+            <select value={filters.month} onChange={event => setFilter("month", event.target.value)} className={inputClass}>
+              <option value="">All months</option>
+              {months.map((name, index) => <option key={name} value={index + 1}>{name}</option>)}
+            </select>
+          </label>
+          <label className="space-y-2 text-sm font-medium">
+            <span>Year</span>
+            <select value={filters.year} onChange={event => setFilter("year", event.target.value)} className={inputClass}>
+              <option value="">All years</option>
+              {filterYears.map(value => <option key={value} value={value}>{value}</option>)}
+            </select>
+          </label>
+          <label className="space-y-2 text-sm font-medium">
+            <span>Payment status</span>
+            <select value={filters.status} onChange={event => setFilter("status", event.target.value)} className={inputClass}>
+              <option value="">All statuses</option>
+              <option value="paid">Savings paid</option>
+              <option value="partial">Savings partial</option>
+              <option value="due">Savings due (unpaid)</option>
+              <option value="outstanding">Any outstanding savings or fine</option>
+              <option value="settled">Fully settled (savings + fine)</option>
+            </select>
+          </label>
+          <label className="space-y-2 text-sm font-medium">
+            <span>Fine status</span>
+            <select value={filters.fine} onChange={event => setFilter("fine", event.target.value)} className={inputClass}>
+              <option value="">All fines</option>
+              <option value="due">Fine outstanding</option>
+              <option value="paid">Fine paid</option>
+              <option value="none">No fine</option>
+            </select>
+          </label>
+        </div>
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+          <p role="status" aria-live="polite" className="text-sm text-gray-600">Showing {filteredRecords.length} of {records.length} records</p>
+          <button type="button" disabled={!hasFilters} onClick={() => setFilters({ ...emptyFilters })}
+            className="rounded-lg border px-4 py-2 text-sm disabled:opacity-50">Clear filters</button>
+        </div>
+        <p className="mt-2 text-xs text-gray-500">Filters work together. Month refers to the contribution month, not the receipt date. Savings paid may still have an outstanding fine.</p>
+      </div>
+      {filteredRecords.length === 0 ? <p className="p-6 text-gray-500">{loading ? "Loading…" : records.length === 0 ? "No contribution records found." : "No records match these filters. Change or clear the filters."}</p> : (
           <table className="w-full text-left text-sm">
             <thead className="bg-gray-50"><tr>
               {["Member", "Month", "Expected", "Savings paid", "Fine assessed", "Fine collected", "Savings due", "Fine due", "Status", "Receipt dates", "Note", "Action"].map((heading) =>
                 <th key={heading} scope="col" className={cellClass}>{heading}</th>
               )}
             </tr></thead>
-            <tbody>{records.map((item) => {
-              const member = typeof item.member === "object" ? item.member : members.find((entry) => entry._id === item.member);
-              const savingsDue = Math.max(0, (paisa(item.expectedAmount) - paisa(item.paidAmount)) / 100);
-              const fineDue = Math.max(0, (paisa(item.fineAmount ?? 0) - paisa(item.finePaidAmount ?? 0)) / 100);
+            <tbody>{filteredRecords.map((item) => {
+const member = typeof item.member === "object" ? item.member : members.find((entry) => entry._id === item.member);
+const savingsDue = Math.max(0, (paisa(item.expectedAmount) - paisa(item.paidAmount)) / 100);
+const fineDue = Math.max(0, (paisa(item.fineAmount ?? 0) - paisa(item.finePaidAmount ?? 0)) / 100);
               return <tr key={item._id} className="border-t">
                 <td className={cellClass}><div className="font-medium">{memberName(member)}</div><div className="text-gray-500">{member?.memberCode}</div></td>
                 <td className={`${cellClass} whitespace-nowrap`}>{months[item.month - 1]} {item.year}</td>
